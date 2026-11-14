@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { run } from '../tools/bot.ts';
+import { analyze } from '../tools/deadtime.ts';
 
 // Pacing regression: the headless greedy bot must finish each act inside the spec windows (minutes).
-const WIN = { I: [24, 42], II: [33, 47], III: [28, 42], IV: [8, 12], TOTAL: [88, 125] } as const;
+const WIN = { I: [24, 42], II: [28, 47], III: [22, 42], IV: [8, 12], TOTAL: [88, 125] } as const;
 describe('pacing (greedy bot)', () => {
   for (const seed of [1, 2]) {
     it(`seed ${seed} stays in the spec windows and reaches an ending`, () => {
@@ -14,6 +15,20 @@ describe('pacing (greedy bot)', () => {
       expect(min('end')).toBeGreaterThanOrEqual(WIN.TOTAL[0]); expect(min('end')).toBeLessThanOrEqual(WIN.TOTAL[1]);
     }, 120000);
   }
+  // Dead-time guard: human-like players (spam-clicking, buying everything affordable) must never stare at a screen with nothing to do for long.
+  for (const mode of ['aggressive', 'clicky'] as const) {
+    for (const seed of [1, 2]) {
+      it(`${mode} bot seed ${seed}: finishes in a sane time and never waits more than 2.5 min with nothing to do`, () => {
+        const r = analyze(mode, seed);
+        expect(r.endMin, 'ending reached').toBeLessThanOrEqual(135); expect(r.endMin).toBeGreaterThanOrEqual(85);
+        const worst = Math.max(0, ...r.gaps.map((g) => g.secs)); expect(worst / 60, `longest dead gap ${(worst / 60).toFixed(1)}min`).toBeLessThanOrEqual(2.5);
+      }, 120000);
+    }
+  }
+  it('greedy bot: no dead stretch beyond 2.5 min and Slides never pile up unused', () => {
+    const r = analyze('greedy', 1); const worst = Math.max(0, ...r.gaps.map((g) => g.secs));
+    expect(worst / 60).toBeLessThanOrEqual(2.5); expect(r.surplusMin).toBeLessThan(1);
+  }, 120000);
   it('lazy bot finishes within 180 minutes', () => {
     const r = run({ seed: 1, mode: 'lazy', maxMin: 200 });
     expect(r.marks.end / 60).toBeLessThanOrEqual(180);

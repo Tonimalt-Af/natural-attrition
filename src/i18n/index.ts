@@ -19,7 +19,9 @@ export function logText(s: State, l: LogLine, hrDecay = false): string {
     const q = person(s, p.n as number, hrDecay && k === 'cut'); Object.assign(p, q);
     if (hrDecay && k === 'cut') k = 'cut_hr';
   }
-  return tpl(LOG[k] ?? k, p);
+  let raw = LOG[k] ?? k;
+  if (raw.includes('||')) { const v = raw.split('||'); raw = v[Math.abs(Number(p.v) || 0) % v.length]; }
+  return tpl(raw, p);
 }
 export function mailText(s: State, m: InboxMail): Mail {
   const base = MAIL[m.id] ?? (m.id.startsWith('advisor_') ? MAIL.advisor_cash : ['Nullwater', m.id, '']);

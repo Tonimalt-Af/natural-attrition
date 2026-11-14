@@ -2,7 +2,8 @@ import { initState, type State } from '../src/engine/state.ts';
 import * as S from '../src/engine/sim.ts';
 import { INITS, TICK, TIERS, RACKS, DAYS_PER_YEAR, A2 } from '../src/engine/data.ts';
 
-export type Mode = 'greedy' | 'lazy' | 'idle';
+export type Mode = 'greedy' | 'lazy' | 'idle' | 'aggressive' | 'clicky';
+const HUMANLIKE = (m: Mode) => m === 'aggressive' || m === 'clicky';
 export interface Run { s: State; marks: Record<string, number>; log: string[]; }
 
 function cheapestFirst(s: State, ids: string[], cap = 1) {
@@ -13,7 +14,7 @@ const A1_ORDER = ['stack', 'macros', 'bus', 'consult', 'hotdesk', 'cip1', 'bots'
 
 function act1(s: State, mode: Mode) {
   const d = S.derive(s);
-  if (s.M < 0.7 && s.cash > 300 && mode === 'greedy') S.pizza(s);
+  if (s.M < (HUMANLIKE(mode) ? 0.5 : 0.7) && s.cash > 300 && (mode === 'greedy' || HUMANLIKE(mode))) S.pizza(s);
   if (s.flags.lowM && s.M < 0.65) S.buy(s, 'wellness');
   if (s.flags.lawW) S.buy(s, 'legalhold');
   // buy in order (first affordable-in-sequence; don't skip ahead past unaffordable except cheap)
@@ -25,13 +26,26 @@ function act1(s: State, mode: Mode) {
   }
   // associates
   if (s.own.consult && s.assoc < 24 && s.slides < 150 && s.cash > S.assocCost(s) * 4) S.buyGen(s, 'assoc');
+  // humans spam associates whenever they can afford one (they 'do something', right?)
+  if (HUMANLIKE(mode) && s.own.consult) { let k = 0; while (k++ < 30 && s.cash > S.assocCost(s) * 1.5 && S.buyGen(s, 'assoc') === '') {} }
+  if (mode === 'clicky') { for (const id of INITS.filter((i) => i.act === 1).map((i) => i.id)) if (!s.own[id] && S.canBuy(s, id) === '') S.buy(s, id); }
   // rehire
-  if (s.own.consult && mode === 'greedy') for (const g of [...s.ghosts]) if (s.cash > 500) S.rehire(s, g);
+  if (s.own.consult && (mode === 'greedy' || mode === 'clicky')) for (const g of [...s.ghosts]) if (s.cash > 500) S.rehire(s, g);
   // cuts
-  const thr = mode === 'greedy' ? 0.62 : 0.7;
-  const xmax = mode === 'greedy' ? 58 : 45;
-  const n = mode === 'greedy' ? 6 : 12;
-  if (s.M > thr && s.X < xmax && d.humans > 400) S.wave(s, -1, n, 300);
+  const H_ = HUMANLIKE(mode);
+  const thr = H_ ? 0.35 : mode === 'greedy' ? 0.62 : 0.7;
+  const xmax = H_ ? 85 : mode === 'greedy' ? 58 : 45;
+  const n = H_ ? (mode === 'clicky' ? 10 : 20) : mode === 'greedy' ? 6 : 12;
+  const floor = H_ ? 300 : 400;
+  if (H_) {
+    // humans save up for the thing they want: don't spend the severance money the next purchase needs
+    let reserve = 0;
+    for (const id of A1_ORDER) { if (s.own[id]) continue; const e = S.canBuy(s, id); if (e === 'cash' || e === '') { reserve = S.costOf(s, INITS.find((i) => i.id === id)!).cash; } break; }
+    if (s.M > thr && s.X < xmax) {
+      const cs = S.candidates(s, d, -1, false).filter((c) => c.pb <= 900).sort((a, b) => a.pb - b.pb);
+      let k = 0; for (const c of cs) { if (k >= n || S.humansAlive(s) <= floor) break; if (s.cash < S.sevOf(s, c.i)) break; if (c.pb > 90 && s.cash - S.sevOf(s, c.i) < reserve) break; if (S.cut(s, c.i) === '') k++; }
+    }
+  } else if (s.M > thr && s.X < xmax && d.humans > floor) S.wave(s, -1, n, 300);
   if (!s.own.memo && s.own.cip1 === undefined) void 0;
 }
 
@@ -39,7 +53,7 @@ export function run(opts: { seed?: number; mode?: Mode; maxMin?: number; stopAct
   const mode = opts.mode ?? 'greedy';
   const s = initState(opts.seed ?? 1, 'Alex', opts.init ?? {});
   const marks: Record<string, number> = {}; const lg: string[] = [];
-  const every = opts.every ?? (mode === 'lazy' ? 45 : mode === 'idle' ? 1e9 : 1);
+  const every = opts.every ?? (mode === 'lazy' ? 45 : mode === 'idle' ? 1e9 : mode === 'clicky' ? 0.5 : mode === 'aggressive' ? 2 : 1);
   let acc = every; const maxT = (opts.maxMin ?? 240) * 60;
   const seenOwn = new Set<string>(); let lastAct = 1;
   while (s.t < maxT && !s.ended) {
@@ -55,6 +69,7 @@ export function run(opts: { seed?: number; mode?: Mode; maxMin?: number; stopAct
 
 function policy(s: State, mode: Mode) {
   if (mode === 'idle') return;
+  if (HUMANLIKE(mode) || mode === 'greedy') S.presentDeck(s);
   if (s.act === 1) act1(s, mode);
   else if (s.act === 2 || s.act === 3) act23(s, mode);
   else act4(s, mode);
@@ -72,6 +87,7 @@ function act23(s: State, mode: Mode) {
     for (const id of req) { if (s.own[id]) continue; const e = S.canBuy(s, id); if (e === '') S.buy(s, id); else { blocked = true; break; } }
     if (!blocked) for (const id of ['atm', 'bnpl', 'secur', 'engage', 'ab3', 'ab4', 'lev3']) if (!s.own[id] && S.canBuy(s, id) === '') S.buy(s, id);
   }
+  if (HUMANLIKE(mode)) { for (const it of INITS) if (it.act <= s.act && !s.own[it.id] && S.canBuy(s, it.id) === '' && !(it.id === 'aiwash') && !(it.id.startsWith('ab') && s.act < 3 && false)) S.buy(s, it.id); }
   // restructuring capacity
   for (let i = TIERS.length - 1; i >= 0; i--) {
     if (s.U <= 0 || d.rcEff * 30 > s.U) break;

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { DEPTS } from '../engine/data.ts';
 import { F_ALIVE, F_BADGE, F_CONTR, F_KEEPER } from '../engine/state.ts';
-import { canCut, candidates, cut, wave, estC, mapped, netValue, sevOf, noiseLevel } from '../engine/sim.ts';
+import { tileHumans, canCut, candidates, cut, wave, estC, mapped, netValue, sevOf, noiseLevel } from '../engine/sim.ts';
 import { nameOf, quirkOf, roleOf, tenureOf } from '../engine/names.ts';
 import { clock, int, num, money, pct, usd } from '../engine/format.ts';
 import { t, deptName } from '../i18n/index.ts';
@@ -64,13 +64,15 @@ export function Floor({ dismantle = 0 }: { dismantle?: number }) {
 export function Portfolio() {
   const g = useGame(); const wrap = useRef<HTMLDivElement>(null); const cv = useRef<HTMLCanvasElement>(null); const w = useWidth(wrap); const h = Math.max(220, Math.min(380, Math.round(w * 0.55)));
   const [sel, setSel] = useState(-1);
-  useEffect(() => { const ctx = setupCanvas(cv.current!, w, h); drawTreemap(ctx, w, h, g.s, performance.now()); }, [g.v, w, h]);
+  useEffect(() => { const ctx = setupCanvas(cv.current!, w, h); drawTreemap(ctx, w, h, g.s, performance.now(), g.d.kappa); }, [g.v, w, h]);
   const hit = (e: MouseEvent) => { const r = cv.current!.getBoundingClientRect(); const x = e.clientX - r.left, y = e.clientY - r.top; const rects = squarify(g.s.tiles, w - 4, h - 4); const f = rects.find((q) => x >= q.x + 2 && x <= q.x + q.w && y >= q.y + 2 && y <= q.y + q.h); setSel(f ? f.i : -1); };
   const tile = sel >= 0 ? g.s.tiles[sel] : null;
   return (
     <div class="portfolio" ref={wrap}>
-      <canvas ref={cv} role="img" aria-label={`Portfolio of ${g.s.tiles.length} holdings, ${int(g.d.E)} baseline employees`} onClick={(e) => hit(e as unknown as MouseEvent)} />
-      <div class="muted small">{tile ? `${tile.name}: ${int(tile.size)} employees, ${pct(tile.size > 0 ? 1 - tile.left / tile.size : 1)} ${t('tile.integrated')}` : `${g.s.tiles.length} holdings · ${int(g.s.U)} awaiting integration · ${int(g.s.I)} integrated`}</div>
+      {!g.s.flags.zoomSeen ? <div class="zoomcap card"><span>{t('zoom.cap')}</span> <button class="btn sm" onClick={() => act((st) => { st.flags.zoomSeen = 1; })}>{t('zoom.ok')}</button></div> : null}
+      <canvas ref={cv} role="img" aria-label={`Portfolio of ${g.s.tiles.length} holdings, ${int(g.d.E)} roles, ${int(g.d.humans)} humans`} onClick={(e) => hit(e as unknown as MouseEvent)} />
+      <div class="muted small">{tile ? `${tile.name}: ${t('hq.humans', { h: int(tileHumans(g.s, g.d.kappa, sel)), r: int(tile.size) })}, ${pct(tile.size > 0 ? 1 - tile.left / tile.size : 1)} ${t('tile.integrated')}` : `${g.s.tiles.length} holdings · ${t('hq.humans', { h: int(g.d.humans), r: int(g.d.E) })} · ${int(g.s.U)} roles awaiting integration`}</div>
+      {!tile && g.d.kappa > 0.01 ? <div class="muted small">{t('hq.note')}</div> : null}
     </div>
   );
 }

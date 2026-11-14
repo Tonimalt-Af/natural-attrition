@@ -11,6 +11,7 @@ export interface Derived {
   credit: number; retain: number; creditShare: number; synthShare: number; phiF: number; lights: number; levMax: number; price: number; stockF: number;
   abMax: number; hdRatio: number; upkeep: number;
 }
+export const PRICE_CAP_MIN = 4, PRICE_CAP_MIN_2 = 3.2, PRICE_MIN_PI = 4;
 const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
 export const has = (s: State, id: string) => !!s.own[id];
 export const aiLevel = (s: State) => { let l = 0; for (let i = 1; i <= 6; i++) if (s.own['ai' + i]) l = i; return AI_LEVELS[l]; };
@@ -251,7 +252,10 @@ export function visible(s: State, it: Init): boolean {
 }
 export function costOf(s: State, it: Init) {
   const pity = s.t - s.lastBuyT > 600 ? 0.8 : 1;
-  const cash = it.cashMin ? it.cashMin * 60 * Math.max(s.act >= 2 ? Math.max(s.piBase, s.piS) : s.piS, 1) : it.cash;
+  const cash0 = it.cashMin ? it.cashMin * 60 * Math.max(s.act >= 2 ? Math.max(s.piBase, s.piS) : s.piS, 1) : it.cash;
+  // "Value-based pricing": nothing ever costs more than a few minutes of what you are actually earning, so a fast player never sits out a flat price.
+  const piRef = s.act >= 2 ? Math.max(s.piS, s.piBase * 0.5) : s.piS;
+  const cash = it.cashMin || piRef < PRICE_MIN_PI ? cash0 : Math.min(cash0, Math.max((s.act >= 2 ? PRICE_CAP_MIN_2 : PRICE_CAP_MIN) * 60 * piRef, 0));
   return { slides: Math.ceil(it.slides * pity), cash: cash * pity };
 }
 export function canBuy(s: State, id: string): string {
@@ -277,8 +281,9 @@ export function buy(s: State, id: string): string {
   if (id === 'ab2' && s.addback >= 1) s.addback = 2;
   return '';
 }
+export function assocCap(s: State) { return s.act === 1 ? A1.ASSOC_CAP : A1.ASSOC_CAP_2; }
 export function buyGen(s: State, kind: string, idx = 0): string {
-  if (kind === 'assoc') { if (!s.own.consult) return 'locked'; const c = assocCost(s); if (s.cash < c) return 'cash'; s.cash -= c; s.assoc++; s.lastBuyT = s.t; return ''; }
+  if (kind === 'assoc') { if (!s.own.consult) return 'locked'; if (s.assoc >= assocCap(s)) return 'cap'; const c = assocCost(s); if (s.cash < c) return 'cash'; s.cash -= c; s.assoc++; s.lastBuyT = s.t; return ''; }
   if (kind === 'partner') { if (!s.own.partners) return 'locked'; const c = partnerCost(s); if (s.cash < c) return 'cash'; s.cash -= c; s.partners++; s.lastBuyT = s.t; return ''; }
   if (kind === 'rc') {
     if (s.act < 2) return 'locked';
@@ -298,7 +303,9 @@ export function buyGen(s: State, kind: string, idx = 0): string {
 function genTarget(s: State): Target {
   const E = Math.max(s.U + s.I, 1000);
   const r = next(s), r2 = next(s), r3 = next(s), r4 = next(s);
-  const size = Math.max(40, Math.round(E * (0.004 + r ** 2 * 0.3) + 60 * r2 * 5));
+  // ~1 in 3 targets is a "tuck-in": small, cheap, always in reach, so a fast economy never stares at a list of purchases it cannot make.
+  const tuck = next(s) < 0.34;
+  const size = tuck ? Math.max(40, Math.round(E * (0.0004 + r2 * 0.0016) + 20)) : Math.max(40, Math.round(E * (0.004 + r ** 2 * 0.3) + 60 * r2 * 5));
   return { id: s.nextTarget++, name: targetName(r3, r4), size, cult: Math.floor(next(s) * CULTURES.length) };
 }
 function startAct2(s: State) {
@@ -310,7 +317,7 @@ function startAct2(s: State) {
   s.tiles = [{ name: 'Nullwater HQ', size: 1000, left: 0, cult: 2 }];
   s.targets = []; for (let k = 0; k < 5; k++) s.targets.push(genTarget(s));
   s.piRepS = s.piS;
-  mail(s, 'a2_start'); log(s, 'act2', undefined, 'good');
+  mail(s, 'a2_start'); log(s, 'act2', undefined, 'good'); log(s, 'zoom');
 }
 function startAct3(s: State) {
   s.act = 3; s.actT[1] = s.t;
@@ -322,6 +329,7 @@ function startAct4(s: State) {
 }
 
 // ---------- Act II+ actions ----------
+export function day1Frac(s: State) { return clamp(A2.DAY1_BASE + A2.DAY1_INT * s.intensity, 0.3, 0.55); }
 export function bidCost(s: State, d: Derived, size: number) { return size * d.price * d.stockF; }
 export function bid(s: State, targetId: number): string {
   if (s.act < 2 || s.act > 3) return 'act';
@@ -336,12 +344,36 @@ export function bid(s: State, targetId: number): string {
   if (s.flags.debtFirst) fromCash = Math.max(0, cost - room);
   fromCash = Math.min(fromCash, Math.max(0, s.cash));
   s.cash -= fromCash; s.debt += cost - fromCash;
-  s.U += tg.size; s.tiles.push({ name: tg.name, size: tg.size, left: tg.size, cult: tg.cult });
+  // Day-1 synergy: an immediate cut of a slice of the acquired headcount (bigger with integration intensity), the rest follows in waves.
+  const day1 = Math.round(tg.size * day1Frac(s));
+  s.U += tg.size - day1; s.I += day1;
+  s.tiles.push({ name: tg.name, size: tg.size, left: tg.size - day1, cult: tg.cult });
+  const cm = CULTURES[tg.cult]?.mul ?? 1;
+  s.S = Math.min(100, s.S + A2.DAY1_SCANDAL * cm * s.intensity * s.intensity * Math.min(2, Math.sqrt(day1 / (0.01 * d.E + 50))));
+  s.flags.lastDay1 = day1;
   mergeTiles(s);
   s.targets.splice(ti, 1, genTarget(s));
   s.lastBuyT = s.t;
   log(s, 'bid', { name: tg.name, n: tg.size });
+  if (day1 > 0) log(s, 'day1', { name: tg.name, n: day1, pct: Math.round(100 * day1 / tg.size) }, 'cut');
   return '';
+}
+export function applyWave(s: State, say: boolean) {
+  let amt = s.flags.waveAcc ?? 0; s.flags.waveAcc = 0;
+  const live = s.tiles.filter((x) => x.left > 0.5); if (!live.length) return;
+  const before = live.map((x) => x.left);
+  for (let pass = 0; pass < 4 && amt > 1e-6; pass++) {
+    const open = live.filter((x) => x.left > 0); if (!open.length) break;
+    const wsum = open.reduce((a, x) => a + Math.sqrt(x.left), 0);
+    let used = 0;
+    for (const x of open) { const sh = Math.min(x.left, amt * Math.sqrt(x.left) / wsum); x.left -= sh; used += sh; }
+    amt -= used;
+  }
+  for (const x of live) if (x.left < 0.5) x.left = 0;
+  if (!say) return;
+  let bi = 0, bd = 0; live.forEach((x, i) => { const dd = before[i] - x.left; if (dd > bd) { bd = dd; bi = i; } });
+  const tl = live[bi]; const n = live.filter((x, i) => before[i] - x.left > 0.5).length;
+  if (bd >= 1 && tl) { s.flags.waveN = (s.flags.waveN ?? 0) + 1; log(s, 'iwave', { name: tl.name, n: Math.round(bd), pct: Math.round(100 * bd / Math.max(tl.size, 1)), k: n, v: (s.flags.waveN + (tl.size | 0)) % 6 }, 'cut'); }
 }
 function mergeTiles(s: State) {
   while (s.tiles.length > 64) {
@@ -468,12 +500,15 @@ function stepAct2(s: State, d: Derived, dt: number, off: boolean) {
   // integration
   const mv = Math.min(s.U, (d.rcEff / A2.KAPPA) * dt * (off ? 0.5 : 1));
   if (mv > 0) {
-    s.U -= mv; s.I += mv; let left = mv; let cult = 1;
-    for (const t of s.tiles) { if (t.left <= 0) continue; const tk = Math.min(t.left, left); t.left -= tk; left -= tk; cult = CULTURES[t.cult]?.mul ?? 1; if (left <= 0) break; }
+    s.U -= mv; s.I += mv;
+    let cult = 1; let big = 0; for (const t of s.tiles) if (t.left > big) { big = t.left; cult = CULTURES[t.cult]?.mul ?? 1; }
+    s.flags.waveAcc = (s.flags.waveAcc ?? 0) + mv;
     const rate = mv / dt;
     const gain = 0.03 * cult * s.intensity * s.intensity * Math.min(4, Math.sqrt(rate / (0.0025 * d.E + 20))) * (s.opt.deny ? 0.8 : 1);
     s.S = Math.min(100, s.S + gain * dt);
   }
+  // Integration waves: the integrated headcount is applied to every pending block in parallel, in steps, not one block at a time.
+  if ((s.flags.waveAcc ?? 0) > 0 && (s.t >= (s.flags.waveAt ?? 0) + A2.WAVE_T || s.U < 1)) { applyWave(s, !off); s.flags.waveAt = s.t; }
   s.S = Math.max(0, s.S - A2.SCANDAL_DECAY * dt);
   s.hqExcess *= Math.exp(-dt / 120);
   if (off) { s.S = Math.max(0, s.S - 0); if (s.act === 3) { s.HD *= 1; } return; }
@@ -581,3 +616,54 @@ export function summary(s: State) {
   return { t: s.t, act: s.act, H: d.humans, cash: s.cash, pi: d.pi, mc: d.mcRep, M: s.M, X: s.X, S: s.S, E: d.E, phi: d.phi, lambdaC: d.lambdaC };
 }
 export { gauss };
+
+// ---------- "Next goal": what is actually blocking, and for how long ----------
+export interface Goal { id: string; blocker: 'slides' | 'cash' | 'h' | 'ready'; eta: number; need: number; have: number }
+export function nextGoal(s: State, d: Derived): Goal | null {
+  let best: Goal | null = null;
+  for (const it of INITS) {
+    if (s.own[it.id] || it.act > s.act || !visible(s, it)) continue;
+    const c = costOf(s, it);
+    const eS = c.slides > s.slides ? (c.slides - s.slides) / Math.max(d.slidesRate, 1e-6) : 0;
+    const eC = c.cash > s.cash ? (d.pi > 1e-6 ? (c.cash - s.cash) / d.pi : Infinity) : 0;
+    let g: Goal;
+    if (it.id === 'memo' && humansAlive(s) > A1.END_H) g = { id: it.id, blocker: 'h', eta: Math.max(eS, eC, 30), need: A1.END_H, have: humansAlive(s) };
+    else if (eS === 0 && eC === 0) g = { id: it.id, blocker: 'ready', eta: 0, need: 0, have: 0 };
+    else if (eS >= eC) g = { id: it.id, blocker: 'slides', eta: eS, need: c.slides, have: s.slides };
+    else g = { id: it.id, blocker: 'cash', eta: eC, need: c.cash, have: s.cash };
+    if (!best || g.eta < best.eta || (g.eta === best.eta && g.blocker === 'ready' && best.blocker !== 'ready')) best = g;
+  }
+  return best;
+}
+
+// ---------- Strategic Deck: the sink for surplus Slides ----------
+export const DECK = { CD: 15, VAL: 0.25, CAP_S: 90, MIN: 100 };
+function deckKeep(s: State): number {
+  let keep = 0;
+  for (const it of INITS) if (!s.own[it.id] && it.act <= s.act && visible(s, it)) keep = Math.max(keep, costOf(s, it).slides);
+  return keep;
+}
+/** What presenting the deck would do right now: slides spent and cash raised ("a Slide is worth 1/4 s of profit per Slide/s of income"). */
+export function deckInfo(s: State, d: Derived) {
+  const keep = deckKeep(s);
+  const piRef = Math.max(s.act >= 2 ? Math.max(s.piS, s.piBase * 0.5) : s.piS, 1);
+  const v = (DECK.VAL * piRef) / Math.max(d.slidesRate, 0.5);
+  const surplus = Math.max(0, s.slides - keep);
+  const gain = Math.min(surplus * v, DECK.CAP_S * piRef);
+  const spend = v > 0 ? gain / v : 0;
+  const cd = Math.max(0, DECK.CD - (s.t - (s.flags.deckAt ?? -1e9)));
+  return { keep, surplus, spend, gain, cd, ok: s.own.stack && surplus >= DECK.MIN && cd <= 0 && s.act >= 1 && s.act <= 3, unlocked: !!s.own.stack };
+}
+export function presentDeck(s: State): string {
+  const d = derive(s); const i = deckInfo(s, d);
+  if (!i.unlocked) return 'locked'; if (i.cd > 0) return 'cd'; if (i.surplus < DECK.MIN) return 'none';
+  s.slides -= i.spend; s.cash += i.gain; s.flags.deckAt = s.t; s.flags.deckN = (s.flags.deckN ?? 0) + 1;
+  log(s, 'deck', { n: Math.round(i.spend), c: Math.round(i.gain * USD_PER_U) }, 'good');
+  return '';
+}
+
+/** People actually on a tile (roles ≠ humans once the AI has done its quiet work). */
+export function tileHumans(s: State, kappa: number, i: number): number {
+  const tl = s.tiles[i]; if (!tl) return 0;
+  return Math.max(0, tl.left + (tl.size - tl.left) * Math.max(0, 1 - kappa) + (i === 0 ? s.hqExcess : 0));
+}

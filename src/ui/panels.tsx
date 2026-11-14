@@ -31,10 +31,10 @@ export function Vitals() {
         </>
       ) : (
         <>
-          <div class="vital"><span>Employees</span><b>{int(d.E)}</b></div>
+          <div class="vital" title={t('hq.note')}><span>Roles <i class="muted small">(org chart)</i></span><b>{int(d.E)}</b></div>
           <div class="vital"><span>{t('cap.debt')}</span><b>{money(s.debt)}</b></div>
           <div class="vital col"><span>{t('hero.scandal')} <b>{Math.round(s.S)}</b>/100</span><Bar v={s.S} max={100} cls={s.S > 60 ? 'warn' : ''} label={t('hero.scandal')} /></div>
-          <div class="vital"><span>Humans</span><b>{int(d.humans)}</b></div>
+          <div class="vital" title={t('hq.note')}><span>Humans <i class="muted small">(in the roles)</i></span><b>{int(d.humans)}</b></div>
         </>
       )}
     </>
@@ -151,17 +151,19 @@ export function Initiatives() {
   list = list.sort((a, b) => S.costOf(s, a).slides - S.costOf(s, b).slides);
   if (G.dec[7] >= 1 && !G.opts.stable && !G.opts.reduced) list = list.slice().sort((a, b) => S.costOf(s, b).cash - S.costOf(s, a).cash);
   const owned = INITS.filter((i) => s.own[i.id]);
-  const next = list.map((i) => { const c = S.costOf(s, i); return { i, e: Math.max((c.slides - s.slides) / Math.max(d.slidesRate, 1e-6), c.cash > s.cash ? (c.cash - s.cash) / Math.max(d.pi, 1e-6) : 0) }; }).sort((a, b) => a.e - b.e)[0];
+  const goal = S.nextGoal(s, d);
   const pizzaCd = Math.max(0, A1.PIZZA_CD - (s.t - s.pizzaAt));
   const gens: JSX.Element[] = [];
   if (s.act === 1) gens.push(<div class="init gen" key="pizza"><div class="init-h"><b>{t('init.pizza')}</b></div><div class="muted small">{t('init.pizza.d')}</div><div class="init-f"><span class="cost">{money(A1.PIZZA_COST)}</span><button class="btn" disabled={pizzaCd > 0 || s.cash < A1.PIZZA_COST} onClick={() => act((st) => S.pizza(st))}>{pizzaCd > 0 ? `${Math.ceil(pizzaCd)} s` : t('init.buy')}</button></div></div>);
-  if (s.own.consult) gens.push(<div class="init gen" key="assoc"><div class="init-h"><b>{t('init.assoc')}</b><span class="count">{s.assoc}</span></div><div class="muted small">{t('init.assoc.d')}</div><div class="init-f"><span class="cost">{money(S.assocCost(s))}</span><button class="btn" disabled={s.cash < S.assocCost(s)} onClick={() => act((st) => S.buyGen(st, 'assoc'))}>{t('init.buy')}</button></div></div>);
+  if (s.own.consult) { const cap = S.assocCap(s), full = s.assoc >= cap, maxNeed = Math.max(0, ...list.map((i) => S.costOf(s, i).slides)), surplusS = s.slides > Math.max(300, 1.5 * maxNeed);
+    gens.push(<div class="init gen" key="assoc"><div class="init-h"><b>{t('init.assoc')}</b><span class="count">{s.assoc <= cap ? `${s.assoc}/${cap}` : s.assoc}</span></div><div class="muted small">{t('init.assoc.d')} {t('assoc.eff', { s: A1.ASSOC_SLIDES, u: A1.ASSOC_UPKEEP })}</div>{full ? <div class="muted small">{t('assoc.cap')}</div> : surplusS ? <div class="muted small">{t('assoc.surplus', { n: num(s.slides) })}</div> : null}<div class="init-f"><span class="cost">{money(S.assocCost(s))}</span><button class="btn" disabled={full || s.cash < S.assocCost(s)} onClick={() => act((st) => S.buyGen(st, 'assoc'))}>{t('init.buy')}</button></div></div>); }
+  { const di = S.deckInfo(s, d); if (di.unlocked && s.act <= 3) gens.push(<div class="init gen" key="deck"><div class="init-h"><b>{t('deck.h')}</b></div><div class="muted small">{t('deck.d')}</div><div class="init-f"><span class="cost">{di.surplus >= 100 ? <>{t('deck.sur', { n: num(di.surplus) })} · <b>{t('deck.get', { c: money(di.gain) })}</b></> : t('deck.none')}</span><button class="btn" disabled={!di.ok} onClick={() => act((st) => { S.presentDeck(st); })}>{di.cd > 0 ? t('deck.cd', { s: Math.ceil(di.cd) }) : t('deck.btn')}</button></div></div>); }
   if (s.own.partners) gens.push(<div class="init gen" key="partner"><div class="init-h"><b>{t('init.partner')}</b><span class="count">{s.partners}</span></div><div class="muted small">{t('init.partner.d')}</div><div class="init-f"><span class="cost">{money(S.partnerCost(s))}</span><button class="btn" disabled={s.cash < S.partnerCost(s)} onClick={() => act((st) => S.buyGen(st, 'partner'))}>{t('init.buy')}</button></div></div>);
   if (s.act >= 2) TIERS.forEach((tr, i) => { if (i > 0 && s.rc[i - 1] < tr.unlockPrev && !s.rc[i]) return; gens.push(<div class="init gen" key={'rc' + i}><div class="init-h"><b>{t('init.rc' + i)}</b><span class="count">{s.rc[i]}</span></div><div class="muted small">{t('init.rc.d')} +{num(tr.yield)}/s each.</div><div class="init-f"><span class="cost">{money(S.tierCost(s, i))}</span><button class="btn" disabled={s.cash < S.tierCost(s, i)} onClick={() => act((st) => S.buyGen(st, 'rc', i))}>{t('init.buy')}</button></div></div>); });
   if (s.act >= 3) RACKS.forEach((rk, i) => { if ((i === 0 && !s.own.synth1) || (i === 1 && !s.own.synth2)) return; gens.push(<div class="init gen" key={'rk' + i}><div class="init-h"><b>{t('init.rk' + i)}</b><span class="count">{s.racks[i]}</span></div><div class="muted small">{t('init.rk.d')}</div><div class="init-f"><span class="cost">{money(S.rackCost(s, i))}</span><button class="btn" disabled={s.cash < S.rackCost(s, i)} onClick={() => act((st) => S.buyGen(st, 'rack', i))}>{t('init.buy')}</button></div></div>); });
   return (
     <div class="inits">
-      <div class="goal card"><span class="muted small">{t('init.next')}</span>{next ? <><b>{initName(next.i.id)}</b><span>{t('init.afford')} <b>{eta(next.e)}</b></span></> : <span class="muted">{t('init.wait')}</span>}</div>
+      <div class="goal card"><span class="muted small">{t('init.next')}</span>{goal ? <><b>{initName(goal.id)}</b><span class="small">{goal.blocker === 'ready' ? t('goal.ready') : t('goal.' + goal.blocker, { n: goal.blocker === 'cash' ? money(goal.need) : num(goal.need), have: goal.blocker === 'cash' ? money(goal.have) : num(goal.have), eta: eta(goal.eta) })}</span></> : <span class="muted">{t('init.wait')}</span>}</div>
       {gens}
       {list.map((i) => <Card key={i.id} id={i.id} />)}
       {owned.length ? <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}><summary>{t('init.owned')} ({owned.length})</summary><ul class="ownedlist">{owned.map((i) => <li key={i.id}>{initName(i.id)}</li>)}</ul></details> : null}

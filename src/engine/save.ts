@@ -33,6 +33,8 @@ export function serialize(s: State, now = Date.now()): string {
 export const migrations: Array<(o: Record<string, unknown>) => Record<string, unknown>> = [
   // v1 -> v2: added Act III/IV fields and piBase
   (o) => ({ ...o, piBase: o.piBase ?? 0, closureSeen: o.closureSeen ?? 0, v: 2 }),
+  // v2 -> v3: integration waves (parallel blocks, Day-1 cut) and the Strategic Deck. In-progress queues keep their per-block `left`; the wave buffer starts empty.
+  (o) => { const f = { ...((o.flags as Record<string, number>) ?? {}) }; f.waveAcc = f.waveAcc ?? 0; f.waveAt = f.waveAt ?? 0; return { ...o, flags: f, v: 3 }; },
 ];
 
 /** Fill any field missing from an older/partial save from a fresh state (forward-compatible). */

@@ -16,6 +16,11 @@ You are Employee #1000 at a 1,000-person company, handed the "Efficiency Initiat
 ### Twists (each has a *Stable UI* fallback)
 T1 the Alligator chart · T2 boomerang consultants & scope creep · T3 the interface decays as departments are cut · T4 the forced "We've updated the experience!" redesign (with a Classic revert) · T5 Reality Lens · T6 Market Field + demand triangle · T7 Act IV dismantles the UI · T8 your own Performance Review stats.
 
+### Cycle 5 mechanics
+- **Strategic Deck**: converts surplus Slides to capped cash (15 s cooldown); **value-based pricing** caps most initiative cash costs at a few minutes of profit; associates are capped (12 in Act I, 40 later).
+- **Day-1 synergies and integration waves**: each acquisition loses 30–55% of its roles at closing; the rest integrate in 20 s waves across all open blocks in parallel. The HQ block shows humans versus roles.
+- `node tools/deadtime.ts modes seeds [--md]` reports dead stretches for the headless bots (greedy, lazy, aggressive, clicky).
+
 ## Controls
 Mouse/touch everywhere; keyboard works for all buttons (Tab/Space/Enter). **Space** pauses, **R** (hold) shows reality. The Settings tab has: **Stable UI** (turns off every UI-surprise twist; auto-on with `prefers-reduced-motion`), reduced motion, high contrast, text size, offline cap, Classic layout, export/import/copy save, and a typed-RESIGN reset.
 

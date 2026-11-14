@@ -205,3 +205,4 @@ table.data th.r { text-align: right; }
 .ticker.bad .tk { color: var(--bad); } .ticker.good .tk { color: var(--good); }
 @keyframes tkin { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @media (max-width: 699px) { .ticker { padding: 6px 12px; font-size: .82rem; } }
+.zoomcap { display: flex; gap: 8px; align-items: center; justify-content: space-between; font-size: 12px; margin-bottom: 6px; background: color-mix(in srgb, var(--accent) 18%, var(--surface)); }

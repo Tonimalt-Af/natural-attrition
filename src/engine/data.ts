@@ -25,7 +25,7 @@ export const A1 = {
   PIZZA_COST: 40, PIZZA_GAIN: 0.12, PIZZA_CD: 30,
   INC_PEN: 0.6, INC_DUR: 90, HAL_PEN: 0.15, HAL_DUR: 60, REHIRE_RETAINER: 180,
   SLIDES_BASE: 0.15, SLIDES_MGT: 0.004,
-  ASSOC_BASE: 400, ASSOC_RATE: 1.15, ASSOC_SLIDES: 0.5, ASSOC_UPKEEP: 2.5, PARTNER_BASE: 1.5e5, PARTNER_RATE: 1.15, PARTNER_SLIDES: 8, PARTNER_UPKEEP: 40,
+  ASSOC_CAP: 12, ASSOC_CAP_2: 40, ASSOC_BASE: 400, ASSOC_RATE: 1.15, ASSOC_SLIDES: 0.5, ASSOC_UPKEEP: 2.5, PARTNER_BASE: 1.5e5, PARTNER_RATE: 1.15, PARTNER_SLIDES: 8, PARTNER_UPKEEP: 40,
   END_H: 520,
 };
 export const NOISE = [1.0, 0.4, 0.15, 0.0];
@@ -55,7 +55,7 @@ export const INITS: Init[] = [
   { id: 'cip3', act: 1, slides: 315, cash: 135000, req: 'copilot' },
   { id: 'telemetry', act: 1, slides: 405, cash: 0, req: 'cip3' },
   { id: 'recog', act: 1, slides: 40, cash: 0, gate: 'min8' },
-  { id: 'memo', act: 1, slides: 675, cash: 90000, gate: 'h520' },
+  { id: 'memo', act: 1, slides: 675, cash: 75000, gate: 'h520' },
   // Act II
   { id: 'lev1', act: 2, slides: 300, cash: 2e6, gate: 'a2' },
   { id: 'procure', act: 2, slides: 120, cash: 0, gate: 'assoc8' },
@@ -101,6 +101,7 @@ export const A2 = {
   CORR_E: 18e6, SYSTEMIC_E: 25e6,
   HAL: 0.0003,
   SCANDAL_DECAY: 0.05,
+  DAY1_BASE: 0.2, DAY1_INT: 0.2, DAY1_SCANDAL: 0.5, WAVE_T: 20,
 };
 export const TIERS = [
   { id: 'rc0', base: 2e3, rate: 1.15, yield: 4, unlockPrev: 0 },
@@ -135,4 +136,4 @@ export const G_MISS = [1, 2, 4, 8];
 export const QUARTER = 300;
 export const OFFLINE_CAP = 8 * 3600;
 export const A4 = { ANALYSIS: 90, SUNSET: 120, STEPS: ['board', 'street', 'hollis', 'dale', 'badge', 'sunset'] };
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;

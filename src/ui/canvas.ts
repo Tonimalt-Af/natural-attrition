@@ -1,6 +1,6 @@
 import { DEPTS } from '../engine/data.ts';
 import { F_ALIVE, F_BADGE, F_CONTR, F_KEEPER, type State, type Tile } from '../engine/state.ts';
-import { netValue, mapped, noiseLevel, type Derived } from '../engine/sim.ts';
+import { netValue, mapped, noiseLevel, tileHumans, type Derived } from '../engine/sim.ts';
 import { hash01 } from '../engine/rng.ts';
 
 export const COLS = 40, ROWS = 25;
@@ -115,7 +115,7 @@ export function squarify(tiles: Tile[], W: number, H: number): Rect[] {
   return out;
 }
 const CULT = ['#b9822f', '#5a8d6a', '#4f7fd0', '#9b5fb0'];
-export function drawTreemap(ctx: CanvasRenderingContext2D, W: number, H: number, s: State, now: number) {
+export function drawTreemap(ctx: CanvasRenderingContext2D, W: number, H: number, s: State, now: number, kappa = 0) {
   const ink = css('--ink'), bg = css('--surface'), muted = css('--muted'), accent = css('--accent');
   ctx.clearRect(0, 0, W, H); ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
   const rects = squarify(s.tiles, W - 4, H - 4);
@@ -126,7 +126,8 @@ export function drawTreemap(ctx: CanvasRenderingContext2D, W: number, H: number,
     // human density texture on the unintegrated part
     if (prog < 1) { ctx.fillStyle = ink; ctx.globalAlpha = 0.28; const gap = 7; for (let yy = y + 3; yy < y + h - 2; yy += gap) for (let xx = x + w * prog + 3; xx < x + w - 2; xx += gap) { ctx.beginPath(); ctx.arc(xx, yy, 1.4, 0, 6.2832); ctx.fill(); } ctx.globalAlpha = 1; }
     ctx.strokeStyle = bg; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, w, h);
-    if (w > 60 && h > 30) { ctx.fillStyle = prog > 0.5 ? '#fff' : ink; ctx.font = '600 11px ui-sans-serif, system-ui'; ctx.fillText(r.t.name.length * 6 > w - 8 ? r.t.name.slice(0, Math.floor((w - 8) / 6)) + '…' : r.t.name, x + 5, y + 14); ctx.font = '10px ui-monospace, monospace'; ctx.globalAlpha = 0.85; ctx.fillText(Math.round(r.t.size).toLocaleString('en-US') + (prog < 1 ? ` · ${Math.round(prog * 100)}%` : ''), x + 5, y + 27); ctx.globalAlpha = 1; }
+    if (w > 60 && h > 30) { ctx.fillStyle = prog > 0.5 ? '#fff' : ink; ctx.font = '600 11px ui-sans-serif, system-ui'; ctx.fillText(r.t.name.length * 6 > w - 8 ? r.t.name.slice(0, Math.floor((w - 8) / 6)) + '…' : r.t.name, x + 5, y + 14); ctx.font = '10px ui-monospace, monospace'; ctx.globalAlpha = 0.85; { const fmt = (n: number) => Math.round(n).toLocaleString('en-US'); const two = kappa > 0.01 && prog > 0; const hm = two ? fmt(tileHumans(s, kappa, s.tiles.indexOf(r.t))) : ''; const pc = prog < 1 ? ` · ${Math.round(prog * 100)}%` : '';
+      let lab = two ? `${hm} ppl / ${fmt(r.t.size)} roles${pc}` : fmt(r.t.size) + pc; if (ctx.measureText(lab).width > w - 8 && two) lab = `${hm} / ${fmt(r.t.size)}${pc}`; if (ctx.measureText(lab).width > w - 8) lab = `${hm || fmt(r.t.size)}`; ctx.fillText(lab, x + 5, y + 27); } ctx.globalAlpha = 1; }
   }
   ctx.fillStyle = muted; void now; void accent;
 }
