@@ -131,6 +131,7 @@ function Act4() {
         <tr><td>{t('perf.lies')}</td><td class="r">{pct(Math.min(9.99, s.stats.maxFiction))}</td></tr>
         <tr><td>{t('perf.q')}</td><td class="r">{s.stats.beats} / {s.stats.beats + s.stats.misses}</td></tr>
         {!g.opts.noMeta ? <tr><td>{t('perf.tab')}</td><td class="r">{Math.round(s.stats.hiddenSec / 60)} min</td></tr> : null}
+        <tr><td>{t('perf.stance')}</td><td class="r">{t('stance.' + S.a4Stance(s))}{(a.fast ?? 0) > 0 ? ` · fast-tracked ×${a.fast}` : ''}</td></tr>
         <tr><td>{t('perf.fit')}</td><td class="r">{t('perf.fit.v')}</td></tr>
       </tbody></table>
       {!g.opts.noMeta && s.stats.hiddenSec > 60 ? <p class="memo small">{t('perf.hidden')}</p> : null}
@@ -141,14 +142,17 @@ function Act4() {
       <div class="doc4">
         {stable ? null : <div class="gone" aria-hidden="true" />}
         <h1 class="memo">{t('a4.h')}</h1>
-        <ul class="eliminated" aria-live="polite">{gone.map((x, i) => <li key={x} class="memo muted">{t('a4.elim', { what: x, by: i % 2 ? 'the ' + removed[Math.min(i + 1, 5)] : 'the ' + x })}</li>)}</ul>
+        {!ended ? <p class="memo intro4">{t('a4.intro')}</p> : null}
+        <ul class="eliminated" aria-live="polite">{gone.map((x, i) => <li key={x} class="memo muted">{t('a4.elim.' + i)}</li>)}</ul>
         {!ended && step <= 5 ? <h2 class="memo">{t('a4.step' + step)}</h2> : null}
         {lastTxt && !ended && step <= 6 ? <blockquote class="memo mail4"><b>{lastTxt[0]}</b><br />{lastTxt[2]}</blockquote> : null}
         {!ended && step <= 3 || (!ended && step === 5) ? (
           <div class="a4act">
-            {a.running ? (<><div class="bar big" role="progressbar" aria-label="Review progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((a.prog / need) * 100)}><i style={{ width: `${(a.prog / need) * 100}%` }} /></div><p class="memo muted">{STATUS[Math.floor((a.prog / need) * STATUS.length)] ?? STATUS[5]}</p></>) : (
-              <>{step > 0 && step <= 3 ? <div class="btnrow tone">{[t('a4.agree'), t('a4.question'), t('a4.resign')].map((x, i) => <button key={i} class={'btn' + (a.tone[step - 1] === i ? ' on' : '')} onClick={() => act((st) => S.a4Tone(st, i))}>{x}</button>)}</div> : null}
-                <button class="btn primary" onClick={() => act((st) => S.a4Run(st))}>{step === 5 ? t('a4.sunset') : t('a4.run')}</button></>
+            {a.running ? (<><div class="bar big" role="progressbar" aria-label="Review progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((a.prog / need) * 100)}><i style={{ width: `${(a.prog / need) * 100}%` }} /></div><p class="memo muted">{STATUS[Math.floor((a.prog / need) * STATUS.length)] ?? STATUS[5]} <span class="mono">{Math.max(0, Math.ceil(need - a.prog))} s</span></p>
+              {step <= 3 && a.tone[step] != null ? <p class="memo small">{t('a4.reply.' + a.tone[step])}</p> : null}
+              <button class="btn fastbtn" onClick={() => act((st) => S.a4Fast(st))}>{t('a4.fast')}</button> <span class="muted small">{t('a4.fast.d')}</span></>) : (
+              step <= 3 ? <><p class="memo">{t('a4.hint')}</p><div class="btnrow tone">{[t('a4.agree'), t('a4.question'), t('a4.resign')].map((x, i) => <button key={i} class="btn primary tone-pick" onClick={() => act((st) => S.a4Pick(st, i))}>{x}</button>)}</div></>
+              : <button class="btn primary" onClick={() => act((st) => S.a4Run(st))}>{t('a4.sunset')}</button>
             )}
           </div>
         ) : null}
@@ -159,7 +163,7 @@ function Act4() {
             <h2 class="memo">{t('end.' + ended)}</h2>
             {ended === 'B' ? <div class="soloDot" aria-label="One dot remains"><i /></div> : null}
             <p class="memo letter">{endMail[2].slice(0, typed)}<span class="caret">▍</span></p>
-            {typed >= endMail[2].length ? <>{review}<p class="memo muted">{t('a4.pending')}: 0. {t('a4.close')}</p><button class="btn" onClick={() => { localStorage.removeItem('natural-attrition:v1:slot0'); location.reload(); }}>{t('end.again')}</button></> : null}
+            {typed >= endMail[2].length ? <><p class="memo muted">{t('stance.note.' + S.a4Stance(s))}</p>{review}<p class="memo muted">{t('a4.pending')}: 0. {t('a4.close')}</p><button class="btn" onClick={() => { localStorage.removeItem('natural-attrition:v1:slot0'); location.reload(); }}>{t('end.again')}</button></> : null}
           </div>
         ) : null}
       </div>

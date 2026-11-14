@@ -325,7 +325,7 @@ function startAct3(s: State) {
   mail(s, 'a3_orc'); log(s, 'act3', undefined, 'good');
 }
 function startAct4(s: State) {
-  s.act = 4; s.actT[2] = s.t; s.a4 = { step: 0, prog: 0, running: false, tone: [], badge: '', nps: 7, sun: 0 };
+  s.act = 4; s.actT[2] = s.t; s.a4 = { step: 0, prog: 0, running: false, tone: [], badge: '', nps: 7, sun: 0, fast: 0 };
   mail(s, 'a4_start'); log(s, 'act4', undefined, 'good');
 }
 
@@ -424,6 +424,14 @@ export function a4Run(s: State): string {
   st.running = true; st.prog = 0; return '';
 }
 export function a4Tone(s: State, tone: number) { s.a4.tone[s.a4.step] = tone; }
+/** Answering a review is what starts it: Agree / Question / Resign (tone is remembered for the exit interview). */
+export function a4Pick(s: State, tone: number): string { if (s.act !== 4 || s.a4.running || s.a4.step > 3) return 'busy'; a4Tone(s, tone); return a4Run(s); }
+/** Fast-track: skip the rest of a running review. The Initiative notes your impatience. */
+export function a4Fast(s: State): string { const st = s.a4; if (s.act !== 4 || !st.running) return 'idle'; st.prog = st.step === 5 ? A4.SUNSET : A4.ANALYSIS; st.fast = (st.fast ?? 0) + 1; log(s, 'a4_fast'); return ''; }
+export function a4Stance(s: State): 'agree' | 'question' | 'resign' | 'mixed' | 'none' {
+  const c = [0, 0, 0]; for (const x of s.a4.tone) if (x >= 0 && x <= 2) c[x]++; const n = c[0] + c[1] + c[2]; if (!n) return 'none';
+  const m = Math.max(...c); if (c.filter((x) => x === m).length > 1) return 'mixed'; return (['agree', 'question', 'resign'] as const)[c.indexOf(m)];
+}
 export function a4Badge(s: State, ch: 'A' | 'B') { if (s.act === 4 && s.a4.step === 4) { s.a4.badge = ch; s.a4.step = 5; s.a4.prog = 0; s.a4.running = false; log(s, 'badge_' + ch); } }
 export function a4Submit(s: State, nps: number) { if (s.act === 4 && s.a4.step === 6) { s.a4.nps = nps; s.ended = s.a4.badge === 'B' ? 'B' : 'A'; log(s, 'ended'); } }
 

@@ -207,3 +207,4 @@ table.data th.r { text-align: right; }
 @media (max-width: 699px) { .ticker { padding: 6px 12px; font-size: .82rem; } }
 .zoomcap { display: flex; gap: 8px; align-items: center; justify-content: space-between; font-size: 12px; margin-bottom: 6px; background: color-mix(in srgb, var(--accent) 18%, var(--surface)); }
 .banner { background: color-mix(in srgb, var(--accent) 16%, var(--surface)); border-radius: var(--radius); padding: 8px 10px; margin-bottom: 8px; font-size: 13px; display: flex; flex-direction: column; gap: 3px; } .banner.orc { border-left: 3px solid var(--warn, #d9a441); } .targets .btn.sm { white-space: normal; max-width: 120px; line-height: 1.15; }
+.intro4 { max-width: 60ch; opacity: .85; } .fastbtn { margin-top: 6px; }

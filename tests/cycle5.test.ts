@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { initState } from '../src/engine/state.ts';
 import * as S from '../src/engine/sim.ts';
 import * as V from '../src/engine/save.ts';
-import { A1, A2, INITS, TICK } from '../src/engine/data.ts';
+import { A1, A2, A4, INITS, TICK } from '../src/engine/data.ts';
 import { run } from '../tools/bot.ts';
 
 const step = (s: ReturnType<typeof initState>, secs: number) => { for (let t = 0; t < secs; t += TICK) S.step(s, TICK); };
@@ -107,4 +107,27 @@ describe('Act III ORC wall', () => {
     } });
     expect(worst / 60).toBeLessThanOrEqual(2.5);
   }, 60000);
+});
+
+describe('Act IV (Redundancy Review)', () => {
+  const act4 = () => { const s = run({ seed: 1, mode: 'greedy', maxMin: 200 }).s; void s; const r = run({ seed: 1, mode: 'greedy', maxMin: 200, stopAct: 4 }); return r.s; };
+  it('answering a review starts it and remembers the tone; a stance is derived', () => {
+    const s = act4(); expect(s.act).toBe(4);
+    expect(S.a4Pick(s, 1)).toBe(''); expect(s.a4.running).toBe(true); expect(s.a4.tone[0]).toBe(1);
+    expect(S.a4Pick(s, 2)).toBe('busy');
+    expect(S.a4Stance(s)).toBe('question');
+  });
+  it('fast-track completes the review at once and is counted; reviews are short', () => {
+    const s = act4(); S.a4Pick(s, 0); expect(S.a4Fast(s)).toBe('');
+    for (let i = 0; i < 8; i++) S.step(s, TICK);
+    expect(s.a4.step).toBe(1); expect(s.a4.fast).toBe(1); expect(S.a4Fast(s)).toBe('idle');
+    expect(A4.ANALYSIS).toBeLessThanOrEqual(45); expect(A4.SUNSET).toBeLessThanOrEqual(60);
+  });
+  it('both endings are still reachable', () => {
+    for (const badge of ['A', 'B'] as const) {
+      const s = act4(); for (let st = 0; st < 4; st++) { S.a4Pick(s, st % 3); S.a4Fast(s); for (let i = 0; i < 8; i++) S.step(s, TICK); }
+      expect(s.a4.step).toBe(4); S.a4Badge(s, badge); S.a4Run(s); S.a4Fast(s); for (let i = 0; i < 8; i++) S.step(s, TICK);
+      expect(s.a4.step).toBe(6); S.a4Submit(s, 9); expect(s.ended).toBe(badge);
+    }
+  });
 });

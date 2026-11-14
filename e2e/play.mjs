@@ -56,10 +56,10 @@ for (const badge of ['A', 'B']) {
   await p.waitForFunction(() => window.__nat.G.s.act === 4, null, { timeout: 120000 }).catch(() => {});
   ok((await G(p, () => window.__nat.G.s.act)) === 4, `act IV reached (badge ${badge})`);
   await p.waitForTimeout(400);
-  for (let i = 0; i < 4; i++) { await p.click('.a4act .btn.primary'); await p.waitForFunction((n) => window.__nat.G.s.a4.step === n, i + 1, { timeout: 60000 }); await p.waitForTimeout(100); }
+  for (let i = 0; i < 4; i++) { await p.click('.a4act .btn.primary'); if (i % 2 === 1) await p.click('.a4act .fastbtn'); await p.waitForFunction((n) => window.__nat.G.s.a4.step === n, i + 1, { timeout: 60000 }); await p.waitForTimeout(100); }
   await p.click(badge === 'A' ? '.a4act .btn.danger' : '.a4act .btn:not(.danger)');
   await p.waitForTimeout(200);
-  await p.click('.a4act .btn.primary'); await p.waitForFunction(() => window.__nat.G.s.a4.step === 6, null, { timeout: 90000 });
+  await p.click('.a4act .btn.primary'); await p.click('.a4act .fastbtn'); await p.waitForFunction(() => window.__nat.G.s.a4.step === 6, null, { timeout: 90000 });
   await p.waitForTimeout(300); await p.screenshot({ path: `shots/${tag}-play-act4-exit-${badge}.png` });
   await p.click('.a4act .btn.primary'); await p.waitForTimeout(5500);
   ok((await G(p, () => window.__nat.G.s.ended)) === badge, `ending ${badge} reached`);

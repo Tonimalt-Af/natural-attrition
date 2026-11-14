@@ -8,7 +8,7 @@ export interface Target { id: number; name: string; size: number; cult: number }
 export interface Mail { id: string; t: number; p?: P; read: boolean }
 export interface LogLine { t: number; k: string; p?: P; tone?: string }
 export interface Quarter { n: number; startT: number; street: number; startPi: number; prevPi: number; g: number }
-export interface A4State { step: number; prog: number; running: boolean; tone: number[]; badge: '' | 'A' | 'B'; nps: number; sun: number }
+export interface A4State { step: number; prog: number; running: boolean; tone: number[]; badge: '' | 'A' | 'B'; nps: number; sun: number; fast: number }
 export interface Stats { cuts: number; incidents: number; lawsuits: number; beats: number; misses: number; liesMax: number; audits: number; reckonings: number; clicks: number; hiddenSec: number; idleSec: number; maxFiction: number; statements: number }
 
 export interface State {
@@ -75,7 +75,7 @@ export function initState(seed = 1, name = 'Alex', opt: Record<string, number> =
     U: 0, I: 0, peakH: A1.H0, hqExcess: 0, debt: 0, addback: 0, F: 0, S: 0, intensity: 1, tiles: [], targets: [], nextTarget: 1,
     immuneUntil: 0, ignoreUntil: 0, auditMark: 0, pendAudit: 0, corr: 0, slumpUntil: 0, slump: 1, reckonings: 0, piBase: 0,
     mix: [0.1, 0.3, 0.6], HD: 0, lastCust: 0, minskyUntil: 0, closureSeen: 0, actT: [0, 0, 0, 0],
-    a4: { step: 0, prog: 0, running: false, tone: [], badge: '' as const, nps: 7, sun: 0 },
+    a4: { step: 0, prog: 0, running: false, tone: [], badge: '' as const, nps: 7, sun: 0, fast: 0 },
     log: [], inbox: [], seen: {}, hist: [], histAt: 0, advAt: 0, lastBuyT: 0, flags: {},
     stats: { cuts: 0, incidents: 0, lawsuits: 0, beats: 0, misses: 0, liesMax: 0, audits: 0, reckonings: 0, clicks: 0, hiddenSec: 0, idleSec: 0, maxFiction: 0, statements: 0 },
     rev: 0,
