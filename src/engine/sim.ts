@@ -93,7 +93,7 @@ export function derive(s: State): Derived {
   let mRep = mTot0;
   if (s.act >= 3) mRep = mTot0 + (400 * Math.max(0, lambdaC - 0.5) ** 2) / (1.0001 - lambdaC);
   const rcEff = TIERS.reduce((a2, t, i) => a2 + t.yield * s.rc[i], 0) * s.intensity;
-  const humans = Math.max(0, s.U + s.I * Math.max(0, 1 - kappa) + s.hqExcess);
+  const humans = Math.max(0, s.U + s.I * Math.max(0, 1 - kappa) + Math.max(s.hqExcess, -1000 * Math.max(0, 1 - kappa)));
   return Object.assign(d, {
     q: 1, Ld: [], R: 0, pay: 0, oh: 0, pi, piRep, H: humans, incPen, kappa, leak, dm: 1 - leak / Math.max(1.2 * E, 1) + c, lambdaC,
     rcEff, debtCap: levMax(s) * Math.max(s.piRepS, 0) * DAYS_PER_YEAR, humans, rackYield, credit,
@@ -317,7 +317,8 @@ function startAct2(s: State) {
   const H = humansAlive(s);
   s.I = 1000; s.U = 0;
   const kappa = A2.KAPPA + A2.KAPPA_AI * aiLevel(s);
-  s.hqExcess = Math.max(0, H - 1000 * (1 - kappa));
+  // Signed: an HQ already leaner than the integrated average stays lean (no phantom rehiring at the zoom-out).
+  s.hqExcess = H - 1000 * (1 - kappa);
   s.tiles = [{ name: 'Nullwater HQ', size: 1000, left: 0, cult: 2 }];
   s.targets = []; for (let k = 0; k < 5; k++) s.targets.push(genTarget(s));
   s.piRepS = s.piS;
@@ -531,7 +532,7 @@ function stepAct2(s: State, d: Derived, dt: number, off: boolean) {
   // Integration waves: the integrated headcount is applied to every pending block in parallel, in steps, not one block at a time.
   if ((s.flags.waveAcc ?? 0) > 0 && (s.t >= (s.flags.waveAt ?? 0) + A2.WAVE_T || s.U < 1)) { applyWave(s, !off); s.flags.waveAt = s.t; }
   s.S = Math.max(0, s.S - A2.SCANDAL_DECAY * dt);
-  s.hqExcess *= Math.exp(-dt / 120);
+  if (s.hqExcess > 0) s.hqExcess *= Math.exp(-dt / 120);
   if (off) { s.S = Math.max(0, s.S - 0); if (s.act === 3) { s.HD *= 1; } return; }
   // hallucinations
   const ai = d.ai;
@@ -694,5 +695,5 @@ export function presentDeck(s: State): string {
 /** People actually on a tile (roles ≠ humans once the AI has done its quiet work). */
 export function tileHumans(s: State, kappa: number, i: number): number {
   const tl = s.tiles[i]; if (!tl) return 0;
-  return Math.max(0, tl.left + (tl.size - tl.left) * Math.max(0, 1 - kappa) + (i === 0 ? s.hqExcess : 0));
+  return Math.max(0, tl.left + (tl.size - tl.left) * Math.max(0, 1 - kappa) + (i === 0 ? Math.max(s.hqExcess, -1000 * Math.max(0, 1 - kappa)) : 0));
 }
