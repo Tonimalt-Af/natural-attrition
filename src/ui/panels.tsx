@@ -34,7 +34,7 @@ export function Vitals() {
           <div class="vital" title={t('hq.note')}><span>Roles <i class="muted small">(org chart)</i></span><b>{int(d.E)}</b></div>
           <div class="vital"><span>{t('cap.debt')}</span><b>{money(s.debt)}</b></div>
           <div class="vital col"><span>{t('hero.scandal')} <b>{Math.round(s.S)}</b>/100</span><Bar v={s.S} max={100} cls={s.S > 60 ? 'warn' : ''} label={t('hero.scandal')} /></div>
-          <div class="vital" title={t('hq.note')}><span>Humans <i class="muted small">(in the roles)</i></span><b>{int(d.humans)}</b></div>
+          <div class="vital" title={t('hq.note')}><span>Humans <i class="muted small">(in the roles)</i></span><b>{int(d.humans)}</b>{s.act >= 2 && s.act <= 3 && <i class="muted small" style="display:block">{t('hq.keep', { p: pct(Math.max(0, 1 - d.kappa)) })}</i>}</div>
         </>
       )}
     </>
