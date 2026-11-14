@@ -78,15 +78,11 @@ export const INITS: Init[] = [
   { id: 'rainy', act: 2, slides: 1200, cash: 2e8, gate: 'e8m' },
   { id: 'aiwash', act: 2, slides: 700, cash: 1e7, req: 'ai1' },
   { id: 'deck', act: 2, slides: 500, cash: 1e7, req: 'ai1' },
-  // Act III
-  { id: 'bnpl', act: 3, slides: 2000, cash: 0, cashMin: 2, gate: 'a3' },
-  { id: 'secur', act: 3, slides: 3000, cash: 0, cashMin: 4, req: 'bnpl' },
-  { id: 'synth1', act: 3, slides: 3500, cash: 0, cashMin: 1, gate: 'a3' },
-  { id: 'synth2', act: 3, slides: 6000, cash: 0, cashMin: 4, req: 'synth1' },
-  { id: 'atm', act: 3, slides: 4000, cash: 0, gate: 'a3' },
-  { id: 'regcap', act: 3, slides: 3000, cash: 0, cashMin: 1, gate: 'phi30' },
-  { id: 'engage', act: 3, slides: 8000, cash: 0, cashMin: 8, req: 'synth2' },
-  { id: 'lights', act: 3, slides: 5000, cash: 0, cashMin: 3, req: 'ai6' },
+  // Act III: The Rehire
+  { id: 'alumni', act: 3, slides: 600, cash: 0, cashMin: 0.08, gate: 'a3' },
+  { id: 'flex', act: 3, slides: 900, cash: 0, cashMin: 0.25, gate: 'a3' },
+  { id: 'store', act: 3, slides: 1500, cash: 0, cashMin: 0.6, gate: 'a3' },
+  { id: 'ir', act: 3, slides: 2400, cash: 0, cashMin: 1.2, gate: 'a3' },
 ];
 export const INIT_BY_ID: Record<string, Init> = Object.fromEntries(INITS.map((i) => [i.id, i]));
 
@@ -94,7 +90,7 @@ export const CIP_RATE: Record<string, number> = { cip1: 0.03, cip2: 0.08, cip3: 
 
 export const A2 = {
   P0: 175, P_EXP: 0.12, N0: 150e6,
-  PI_U: 0.055, PI_I: 0.505, PI_AI: 0.30, PI_LIGHTS: 0.04, KAPPA: 0.62, KAPPA_AI: 0.30, KAPPA_LIGHTS: 0.08, HUM_KAPPA: 0.85, HUM_KAPPA_AI: 0.13, HUM_KAPPA_LIGHTS: 0.02,
+  PI_U: 0.055, PI_I: 0.505, PI_AI: 0.30, KAPPA: 0.62, KAPPA_AI: 0.30, HUM_KAPPA: 0.85, HUM_KAPPA_AI: 0.13,
   INTEREST: 0.06 / 250, LEV_BASE: 3,
   ADDBACK: [0, 0.15, 0.35, 0.7, 1.5],
   AUDIT_H: 0.0004, AUDIT_FROM: 0.4, AUDIT_FIRST: 2e10, // USD, ×10 each
@@ -109,14 +105,19 @@ export const TIERS = [
   { id: 'rc2', base: 2e7, rate: 1.19, yield: 6e4, unlockPrev: 10 },
   { id: 'rc3', base: 2e9, rate: 1.21, yield: 8e6, unlockPrev: 10 },
 ];
-export const RACKS = [
-  { id: 'rk0', mins: 0.04, rate: 1.12, frac: 0.03 },
-  { id: 'rk1', mins: 0.25, rate: 1.13, frac: 0.5 },
-];
+/** Act III "The Rehire". Money is expressed in π0-seconds (π0 = the profit rate at the moment demand stalls). */
 export const A3 = {
-  EPS: 0.9, CREDIT_MAX: 0.4, HD_ACC: 0.5, HD_DECAY: 0.002, MINSKY_FROM: 0.8, MINSKY_H: 0.004,
-  ATM: 1.5e-7, ORC_PHI: 0.5, RACK_UPKEEP: 0.02, CLOSURE: 0.9, HUMANS_END: 0.05,
+  DM0: 0.28, RS: 100, TAU_UP: 10, TAU_DN: 18,
+  RET0: 3.5, RET_G: 1.017, PAY: 0.0016, GRUDGE: 1.2, GRUDGE_N: 30,
+  PEN: 0.14, TAU_CONF: 100, TAU_CONF_IR: 55, INTERV_AT: 0.35, INTERV_N: 3, INTERV_TO: 0.7, SAFE: 0.4,
+  COHORT: 0.003, GRANT: 45, STORE: 0.4, FLEX: 0.7,
+  DM_FIN: 0.8, FIN_RET: 6, FIN_WAIT: 20, CONF_MC: 0.55,
 };
+/** Per-department: how much one person of that department brings back (dm) and how hard the Board takes it (bp). */
+export const DEPT3 = [
+  { dm: 1.1, bp: 1.0 }, { dm: 1.3, bp: 1.1 }, { dm: 1.4, bp: 1.3 }, { dm: 1.0, bp: 1.0 }, { dm: 0.6, bp: 0.6 },
+  { dm: 0.5, bp: 0.5 }, { dm: 0.8, bp: 0.5 }, { dm: 0.7, bp: 0.3 }, { dm: 1.2, bp: 1.5 },
+];
 export const CULTURES = [
   { id: 'family', mul: 2 }, { id: 'union', mul: 1.5 }, { id: 'vc', mul: 0.8 }, { id: 'founder', mul: 1.3 },
 ];
@@ -136,4 +137,4 @@ export const G_MISS = [1, 2, 4, 8];
 export const QUARTER = 300;
 export const OFFLINE_CAP = 8 * 3600;
 export const A4 = { ANALYSIS: 30, SUNSET: 40, STEPS: ['board', 'street', 'hollis', 'dale', 'badge', 'sunset'] };
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;

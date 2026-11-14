@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { DEPTS } from '../engine/data.ts';
-import { F_ALIVE, F_BADGE, F_CONTR, F_KEEPER } from '../engine/state.ts';
-import { tileHumans, canCut, candidates, cut, wave, estC, mapped, netValue, sevOf, noiseLevel } from '../engine/sim.ts';
+import { A3, DEPTS } from '../engine/data.ts';
+import { F_ALIVE, F_BADGE, F_CONTR, F_KEEPER, F_TWICE } from '../engine/state.ts';
+import { tileHumans, canCut, candidates, cut, wave, estC, mapped, netValue, sevOf, noiseLevel, offer, canReengage, reengage, dmGain, goal3 } from '../engine/sim.ts';
 import { nameOf, quirkOf, roleOf, tenureOf } from '../engine/names.ts';
 import { clock, int, num, money, pct, usd } from '../engine/format.ts';
 import { t, deptName } from '../i18n/index.ts';
+import { eta } from '../engine/format.ts';
 import { G, act, useGame } from './store.ts';
-import { drawField, drawFloor, drawJaws, drawTreemap, floorHit, floorLayout, setupCanvas, squarify, type Ghost } from './canvas.ts';
+import { drawFloor, drawJaws, drawTreemap, floorHit, floorLayout, setupCanvas, squarify, type Ghost } from './canvas.ts';
 
 function useWidth(ref: { current: HTMLElement | null }) {
   const [w, setW] = useState(600);
@@ -16,9 +17,46 @@ function useWidth(ref: { current: HTMLElement | null }) {
   return w;
 }
 
+/** Act III: how this person left, and what bringing them back costs and does. */
+export function exitLine(s: typeof G.s, i: number): string {
+  const w = s.cutW[i];
+  if (w > 0) return t('a3.cutw', { w, k: s.waves[w - 1] ?? 1, time: clock(s.cutT[i]) }) + (s.fl[i] & F_TWICE ? ' ' + t('a3.twice') : '');
+  return t('a3.left', { time: clock(s.cutT[i]) });
+}
+function OfferCard({ i }: { i: number }) {
+  const g = useGame(); const s = g.s; const d = g.d; const dep = DEPTS[s.dept[i]]; const f = s.fl[i];
+  const head = (
+    <><div class="pc-h"><span class="glyph" style={{ color: dep.color }}>{dep.glyph}</span> <b>{f & F_BADGE ? s.name : nameOf(s.seed, i)}</b>{i === s.first ? <span class="chip">{t('a3.firstchip')}</span> : null}{f & F_CONTR ? <span class="chip">{t('dir.contractor')}</span> : null}</div>
+      <div class="muted">{roleOf(s.seed, i, s.dept[i])} · {deptName(s.dept[i])} · {tenureOf(s.seed, i)} yrs</div></>
+  );
+  if (f & F_BADGE) return <div class="pcard" role="group" aria-label="Selected person">{head}<div class="muted small">{t('a3.badge')}</div></div>;
+  if (f & F_ALIVE) return <div class="pcard" role="group" aria-label="Selected person">{head}<div class="muted small">{f & F_CONTR ? t('a3.back', { bill: money(s.w[i] * A3.PAY * Math.max(s.pi0, 1)) }) : t('a3.here')}</div></div>;
+  const o = offer(s, i); const why = canReengage(s, i); const gain = dmGain(s, o.eff, d);
+  const after = s.conf - o.pen; const lvl = o.grudge < 0.34 ? 0 : o.grudge < 0.67 ? 1 : 2;
+  return (
+    <div class="pcard" role="group" aria-label="Selected person">
+      {head}
+      <div class="small">{exitLine(s, i)}</div>
+      <div class="muted small">{quirkOf(s.seed, i)}</div>
+      {i === s.first ? <div class="small memo">{t('a3.first.card')}</div> : (
+        <>
+          <div class="muted small">{t('a3.grudge.' + lvl)}</div>
+          <div class="pc-row"><span>{t('a3.ret')}</span><b>{money(o.ret)}</b></div>
+          <div class="pc-row"><span>{t('a3.bill')}</span><b>{money(o.pay)}{t('hero.s')} <span class="muted small">(3×)</span></b></div>
+          <div class="pc-row"><span>{t('a3.demand')}</span><b class="good">+{(gain * 100).toFixed(1)} pts</b></div>
+          <div class="pc-row"><span>{t('a3.board')}</span><b class={after < A3.INTERV_AT ? 'bad' : ''}>−{(o.pen * 100).toFixed(0)} → {Math.max(0, Math.round(after * 100))}%</b></div>
+          {after < A3.INTERV_AT ? <div class="small bad">{t('a3.warn')}</div> : null}
+          <button class="btn primary" disabled={!!why} onClick={() => act((st) => reengage(st, i))}>{why === 'cash' ? t('a3.needcash', { n: money(o.ret) }) : why === 'done' ? t('a3.reeng') : t('a3.reeng') + ' · ' + money(o.ret)}</button>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function PersonCard({ i }: { i: number }) {
   const g = useGame(); const s = g.s; const d = g.d;
   if (i < 0 || i >= s.dept.length) return null;
+  if (s.act === 3) return <OfferCard i={i} />;
   const dep = DEPTS[s.dept[i]]; const alive = !!(s.fl[i] & F_ALIVE);
   const est = estC(s, i); const nv = alive ? netValue(s, d, i, false) : 0; const pb = nv > 0 ? sevOf(s, i) / nv : Infinity;
   const err = canCut(s, i);
@@ -45,18 +83,19 @@ export function Floor({ dismantle = 0 }: { dismantle?: number }) {
   useEffect(() => {
     const s = g.s; const now = performance.now(); const { cell } = floorLayout(w);
     const cur = new Uint8Array(s.fl.length); for (let i = 0; i < s.fl.length; i++) cur[i] = s.fl[i] & F_ALIVE;
-    if (prev.current && prev.current.length === cur.length) for (let i = 0; i < cur.length; i++) if (prev.current[i] && !cur[i]) ghosts.current.push({ x: (i % 40) * cell + cell / 2, y: Math.floor(i / 40) * cell + cell / 2, t0: now, col: DEPTS[s.dept[i]].color });
+    if (prev.current && prev.current.length === cur.length) for (let i = 0; i < cur.length; i++) { if (prev.current[i] && !cur[i]) ghosts.current.push({ x: (i % 40) * cell + cell / 2, y: Math.floor(i / 40) * cell + cell / 2, t0: now, col: DEPTS[s.dept[i]].color }); else if (!prev.current[i] && cur[i] && s.act === 3) ghosts.current.push({ x: (i % 40) * cell + cell / 2, y: Math.floor(i / 40) * cell + cell / 2, t0: now, col: DEPTS[s.dept[i]].color, kind: 'in' }); }
     prev.current = cur; ghosts.current = ghosts.current.filter((q) => now - q.t0 < 500).slice(-120);
     const c = cv.current!; const ctx = setupCanvas(c, floorLayout(w).gw, gh + strip);
-    let raf = 0; const draw = () => { drawFloor(ctx, floorLayout(w).gw, s, g.d, g.sel, hover, ghosts.current, performance.now(), reduced, dismantle); if (ghosts.current.some((q) => performance.now() - q.t0 < 460)) raf = requestAnimationFrame(draw); };
-    draw(); return () => cancelAnimationFrame(raf);
+    let raf = 0; const gold = s.act === 3 && !s.flags.finAt && !reduced; const draw = () => { drawFloor(ctx, floorLayout(w).gw, s, g.d, g.sel, hover, ghosts.current, performance.now(), reduced, dismantle); if (ghosts.current.some((q) => performance.now() - q.t0 < 460)) raf = requestAnimationFrame(draw); };
+    draw(); const iv = gold ? window.setInterval(draw, 160) : 0; return () => { cancelAnimationFrame(raf); if (iv) clearInterval(iv); };
   }, [g.v, w, hover, g.sel, dismantle]);
   const pos = (e: PointerEvent) => { const r = cv.current!.getBoundingClientRect(); return floorHit(floorLayout(w).gw, e.clientX - r.left, e.clientY - r.top); };
+  const shown = g.sel >= 0 ? g.sel : g.s.act === 3 ? hover : -1;
   return (
     <div class="floor" ref={wrap}>
-      <canvas ref={cv} role="img" aria-label={`The Floor: ${int(g.d.humans)} people across nine departments`} onPointerMove={(e) => setHover(pos(e as unknown as PointerEvent))} onPointerLeave={() => setHover(-1)} onClick={(e) => { const i = pos(e as unknown as PointerEvent); G.sel = i; G.v++; act(() => 0); }} />
+      <canvas ref={cv} role="img" aria-label={g.s.act === 3 ? `The Floor: ${g.s.reh} re-engaged, ${g.s.dept.length - g.s.dn.reduce((a, b) => a + b, 0)} still out. Use the Re-engagement Desk below for the full list.` : `The Floor: ${int(g.d.humans)} people across nine departments`} onPointerMove={(e) => setHover(pos(e as unknown as PointerEvent))} onPointerLeave={() => setHover(-1)} onClick={(e) => { const i = pos(e as unknown as PointerEvent); G.sel = i; G.v++; act(() => 0); }} />
       <div class="legend" aria-hidden="true">{DEPTS.map((d, i) => <span key={i} style={{ color: d.color }}>{d.glyph} <span class="muted">{deptName(i).slice(0, 3)} {g.s.dn[i]}</span></span>)}</div>
-      {g.sel >= 0 && g.sel < g.s.dept.length ? <PersonCard i={g.sel} /> : <div class="hint">{g.s.cuts < 10 ? <div class="firstrun"><b>Find efficiencies.</b> <span class="memo">The grey ○ Innovation Lab, bottom of the Floor, produces nothing. Start there. Click anyone for their card, or use the Directory below.</span><div class="btnrow"><button class="btn primary" disabled={g.s.cash < 60} onClick={() => act((st) => wave(st, 8, 3, 1e9))}>Transition 3 from the Innovation Lab</button></div></div> : <div class="muted small">{t('floor.hint')}</div>}</div>}
+      {shown >= 0 && shown < g.s.dept.length ? <PersonCard i={shown} /> : g.s.act === 3 ? <div class="hint muted small">{t('a3.hint')}</div> : <div class="hint">{g.s.cuts < 10 ? <div class="firstrun"><b>Find efficiencies.</b> <span class="memo">The grey ○ Innovation Lab, bottom of the Floor, produces nothing. Start there. Click anyone for their card, or use the Directory below.</span><div class="btnrow"><button class="btn primary" disabled={g.s.cash < 60} onClick={() => act((st) => wave(st, 8, 3, 1e9))}>Transition 3 from the Innovation Lab</button></div></div> : <div class="muted small">{t('floor.hint')}</div>}</div>}
     </div>
   );
 }
@@ -77,18 +116,31 @@ export function Portfolio() {
   );
 }
 
-export function Field() {
-  const g = useGame(); const cv = useRef<HTMLCanvasElement>(null); const d = g.d;
-  const grey = Math.max(0, Math.min(0.85, 1 - d.dm)); const syn = d.lambdaC;
-  const sm = useRef({ syn: 0, grey: 0 });
-  useEffect(() => { sm.current.syn += (syn - sm.current.syn) * 0.5; sm.current.grey += (grey - sm.current.grey) * 0.5; drawField(cv.current!, g.s, sm.current.syn, sm.current.grey, performance.now()); }, [g.v]);
-  useEffect(() => { if (g.s.lastCust !== 1) return; const id = setInterval(() => drawField(cv.current!, g.s, sm.current.syn, sm.current.grey, performance.now()), 250); return () => clearInterval(id); }, [g.s.lastCust]);
+const moodOf = (c: number) => (c >= 0.7 ? 0 : c >= 0.5 ? 1 : c >= A3.INTERV_AT ? 2 : 3);
+/** Act III's two meters: demand coming back vs. the Board's patience, and the goal under them. */
+export function Meters() {
+  const g = useGame(); const s = g.s; const d = g.d; if (s.act !== 3) return null;
   return (
-    <div class="field">
-      <canvas ref={cv} width={100} height={100} role="img" aria-label={`Market field: ${pct(syn)} of customers are synthetic`} />
-      <div class="muted small">{pct(syn)} synthetic · {pct(grey)} exhausted · {pct(Math.max(0, 1 - syn - grey * (1 - syn)))} real</div>
+    <div class="meters">
+      <div class="meter" role="group" aria-label={t('a3.demand')}>
+        <div class="m-h"><b>{t('a3.demand')}</b><span>{pct(d.dm)} <small class="muted">→ {pct(d.dmTarget)}</small></span></div>
+        <div class="m-bar" role="progressbar" aria-valuenow={Math.round(d.dm * 100)} aria-valuemin={0} aria-valuemax={100} aria-label={t('a3.demand')}><i style={{ width: `${d.dm * 100}%` }} /><u class="target" style={{ left: `${d.dmTarget * 100}%` }} /><u class="mark" style={{ left: `${A3.DM_FIN * 100}%` }} /></div>
+        <small class="muted">{t('a3.demand.d', { n: Math.round(A3.DM_FIN * 100) })}</small>
+      </div>
+      <div class={'meter board' + (s.conf < A3.INTERV_AT + 0.1 ? ' danger' : '')} role="group" aria-label={t('a3.board')}>
+        <div class="m-h"><b>{t('a3.board')}</b><span>{pct(s.conf)} <small class="muted">{t('a3.mood.' + moodOf(s.conf))}</small></span></div>
+        <div class="m-bar" role="progressbar" aria-valuenow={Math.round(s.conf * 100)} aria-valuemin={0} aria-valuemax={100} aria-label={t('a3.board')}><i class="conf" style={{ width: `${s.conf * 100}%` }} /><u class="zone" style={{ width: `${A3.INTERV_AT * 100}%` }} /></div>
+        <small class="muted">{t('a3.board.d', { n: Math.round(A3.INTERV_AT * 100), k: A3.INTERV_N })}</small>
+      </div>
     </div>
   );
+}
+export function GoalCard() {
+  const g = useGame(); const s = g.s; const d = g.d; if (s.act !== 3) return null;
+  const gl = goal3(s, d);
+  const m = gl.mandate === 1 ? t('a3.m1', { have: gl.have, need: gl.need }) : gl.mandate === 2 ? t('a3.m2', { have: Math.round(gl.have * 100) }) : gl.mandate === 3 ? t('a3.m3', { have: Math.round(gl.have * 100), n: Math.round(A3.DM_FIN * 100) }) : t('a3.m4');
+  const lim = gl.limit === 'cash' ? t('a3.lim.cash', { c: money(gl.ret), have: money(s.cash), eta: eta(gl.eta) }) : gl.limit === 'board' ? t('a3.lim.board', { conf: Math.round(s.conf * 100), n: Math.round(A3.INTERV_AT * 100), eta: eta(gl.eta) }) : gl.limit === 'finale' ? t('a3.lim.finale', { c: money(gl.ret) }) : gl.limit === 'done' ? t('a3.lim.done', { eta: Math.ceil(gl.eta) }) : t('a3.lim.go');
+  return <div class="goal card" role="status"><span class="muted small">{t('a3.goal', { n: gl.mandate })}</span><b>{m}</b><span class="small">{lim}</span></div>;
 }
 
 export function Jaws() {
@@ -106,31 +158,4 @@ export function Jaws() {
   );
 }
 
-export function Triangle() {
-  const g = useGame(); const s = g.s; const ref = useRef<SVGSVGElement>(null);
-  const tot = s.mix[0] + s.mix[1] + s.mix[2] || 1; const m = [s.mix[0] / tot, s.mix[1] / tot, s.mix[2] / tot];
-  const V = [[100, 14], [20, 150], [180, 150]]; // retain top, credit left, synth right
-  const px = m[0] * V[0][0] + m[1] * V[1][0] + m[2] * V[2][0], py = m[0] * V[0][1] + m[1] * V[1][1] + m[2] * V[2][1];
-  const setFrom = (e: PointerEvent) => {
-    const r = ref.current!.getBoundingClientRect(); const x = ((e.clientX - r.left) / r.width) * 200, y = ((e.clientY - r.top) / r.height) * 160;
-    const [a, b, c] = V; const det = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
-    let l1 = ((b[1] - c[1]) * (x - c[0]) + (c[0] - b[0]) * (y - c[1])) / det, l2 = ((c[1] - a[1]) * (x - c[0]) + (a[0] - c[0]) * (y - c[1])) / det; let l3 = 1 - l1 - l2;
-    l1 = Math.max(0, l1); l2 = Math.max(0, l2); l3 = Math.max(0, l3); const z = l1 + l2 + l3; act((st) => { st.mix = [l1 / z, l2 / z, l3 / z]; });
-  };
-  const sl = (i: number, label: string) => (
-    <label class="mixrow"><span>{label}</span><input type="range" min={0} max={100} value={Math.round(m[i] * 100)} aria-label={label} onInput={(e) => { const v = Number((e.target as HTMLInputElement).value) / 100; const o = [0, 1, 2].filter((k) => k !== i); const rest = m[o[0]] + m[o[1]] || 1e-9; const nm = [0, 0, 0]; nm[i] = v; nm[o[0]] = ((1 - v) * m[o[0]]) / rest || (1 - v) / 2; nm[o[1]] = ((1 - v) * m[o[1]]) / rest || (1 - v) / 2; act((st) => { st.mix = nm; }); }} /><b>{Math.round(m[i] * 100)}%</b></label>
-  );
-  const credit = s.own.bnpl;
-  return (
-    <div class="tri">
-      <svg ref={ref} viewBox="0 0 200 160" role="img" aria-label="Demand strategy triangle" onPointerDown={(e) => { (e.target as Element).setPointerCapture?.(e.pointerId); setFrom(e as unknown as PointerEvent); }} onPointerMove={(e) => { if (e.buttons) setFrom(e as unknown as PointerEvent); }} tabIndex={0} onKeyDown={(e) => { const k = e.key; const dx = k === 'ArrowRight' ? 1 : k === 'ArrowLeft' ? -1 : 0, dy = k === 'ArrowDown' ? 1 : k === 'ArrowUp' ? -1 : 0; if (!dx && !dy) return; e.preventDefault(); const r = ref.current!.getBoundingClientRect(); setFrom({ clientX: r.left + ((px + dx * 3) / 200) * r.width, clientY: r.top + ((py + dy * 3) / 160) * r.height } as PointerEvent); }}>
-        <polygon points={V.map((v) => v.join(',')).join(' ')} fill="none" stroke="currentColor" opacity=".5" />
-        <text x="100" y="10" text-anchor="middle" class="tl">{t('cap.retain')}</text><text x="6" y="158" class="tl">{t('cap.credit')}{credit ? '' : ' 🔒'}</text><text x="194" y="158" text-anchor="end" class="tl">{t('cap.synth')}</text>
-        <circle cx={px} cy={py} r="7" class="dot" />
-      </svg>
-      <div class="mixes">{sl(0, t('cap.retain'))}{sl(1, t('cap.credit'))}{sl(2, t('cap.synth'))}</div>
-      <div class="muted small">{t('cap.mix.d')}</div>
-    </div>
-  );
-}
 export { cut, candidates, num, wave };

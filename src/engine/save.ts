@@ -1,6 +1,7 @@
 import { initState, type State } from './state.ts';
-import { OFFLINE_CAP, SAVE_VERSION } from './data.ts';
-import { mailAny, step } from './sim.ts';
+import { A3, OFFLINE_CAP, SAVE_VERSION } from './data.ts';
+import { a4Verdict, mailAny, pickFirst, step } from './sim.ts';
+import { hash01 } from './rng.ts';
 
 export const KEY = 'natural-attrition:v1:slot0';
 export const BAK = (i: number) => `natural-attrition:v1:bak${i}`;
@@ -35,7 +36,41 @@ export const migrations: Array<(o: Record<string, unknown>) => Record<string, un
   (o) => ({ ...o, piBase: o.piBase ?? 0, closureSeen: o.closureSeen ?? 0, v: 2 }),
   // v2 -> v3: integration waves (parallel blocks, Day-1 cut) and the Strategic Deck. In-progress queues keep their per-block `left`; the wave buffer starts empty.
   (o) => { const f = { ...((o.flags as Record<string, number>) ?? {}) }; f.waveAcc = f.waveAcc ?? 0; f.waveAt = f.waveAt ?? 0; return { ...o, flags: f, v: 3 }; },
+  // v3 -> v4: Act III "The Rehire" replaces the Closed Loop. Everyone who left in Act I gets a (reconstructed) exit record, old Act III saves restart at the stall.
+  (o) => migrateV4(o),
 ];
+const OLD_A3_OWN = ['bnpl', 'secur', 'synth1', 'synth2', 'atm', 'regcap', 'engage', 'lights'];
+function migrateV4(o: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...o, v: 4 };
+  for (const k of ['racks', 'mix', 'HD', 'lastCust', 'minskyUntil', 'closureSeen']) delete out[k];
+  const own = { ...((o.own as Record<string, number>) ?? {}) }; for (const k of OLD_A3_OWN) delete own[k]; out.own = own;
+  const seed = (o.seed as number) ?? 1; const fl = (o.fl as number[]) ?? []; const n = fl.length;
+  const actT = (o.actT as number[]) ?? [0, 0, 0, 0]; const horizon = Math.max(120, (o.act as number) >= 2 && actT[0] > 0 ? actT[0] : ((o.t as number) ?? 600));
+  const dead: number[] = []; for (let i = 0; i < n; i++) if (!(fl[i] & 1) && !(fl[i] & 8)) dead.push(i);
+  dead.sort((a, b) => hash01(seed, a * 13 + 7) - hash01(seed, b * 13 + 7));
+  const cutN = Math.min(dead.length, Math.max(0, Math.round((o.cuts as number) ?? 0)));
+  const cutT = new Array(n).fill(0), cutW = new Array(n).fill(0); const waves: number[] = [];
+  let left = 0, w = 0;
+  dead.forEach((i, r) => {
+    cutT[i] = Math.round((30 + (r / Math.max(1, dead.length)) * (horizon - 30)) * 10) / 10;
+    if (r < cutN) { if (left <= 0) { left = 3 + Math.floor(hash01(seed, 900 + w) * 14); waves.push(0); w++; } cutW[i] = w; waves[w - 1]++; left--; }
+  });
+  out.cutT = cutT; out.cutW = cutW; out.waves = waves; out.lastCutT = -999; out.first = -1;
+  const act = (o.act as number) ?? 1;
+  if (act >= 3) out.first = pickFirst({ ...out, fl, dept: o.dept } as unknown as State);
+  if (act === 3) {
+    const pi0 = Math.max((o.piS as number) ?? 0, (o.piBase as number) ?? 0, 1);
+    Object.assign(out, { pi0, dm: 1, conf: 1, reh: 0, rstack: [], reffRaw: 0, rwRaw: 0, interv: 0, cash: Math.max((o.cash as number) ?? 0, A3.GRANT * pi0) });
+    const seen = { ...((o.seen as Record<string, number>) ?? {}), a3_start: 1 }; out.seen = seen;
+    out.inbox = [...(((o.inbox as unknown[]) ?? []) as unknown[]), { id: 'a3_start', t: (o.t as number) ?? 0, read: false }];
+  }
+  if (act === 4) {
+    const a4 = { step: 0, prog: 0, running: false, tone: [], badge: '', nps: 7, sun: 0, fast: 0, ...((o.a4 as object) ?? {}), c: 0, v: 0 };
+    out.a4 = a4;
+    const st = { ...initState((o.seed as number) ?? 1), ...out } as unknown as State; if (a4.step >= 4) { a4Verdict(st); (out.a4 as { c: number; v: number }).c = st.a4.c; (out.a4 as { c: number; v: number }).v = st.a4.v; }
+  }
+  return out;
+}
 
 /** Fill any field missing from an older/partial save from a fresh state (forward-compatible). */
 function fill(o: Record<string, unknown>): State {

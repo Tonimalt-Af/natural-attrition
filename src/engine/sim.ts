@@ -1,5 +1,5 @@
-import { A1, A2, A3, AUTO_DEPTS, CIP_RATE, CULTURES, DAYS_PER_YEAR, DEPTS, G_BEAT, G_MISS, GUIDANCE, INITS, INIT_BY_ID, NDEPT, NOISE, QUARTER, RACKS, STATEMENT, A4, TICK, TIERS, USD_PER_U, type Init } from './data.ts';
-import { F_ALIVE, F_BADGE, F_CONTR, F_KEEPER, type P, type State, type Tile, type Target } from './state.ts';
+import { A1, A2, A3, AUTO_DEPTS, CIP_RATE, CULTURES, DAYS_PER_YEAR, DEPT3, DEPTS, G_BEAT, G_MISS, GUIDANCE, INITS, INIT_BY_ID, NDEPT, NOISE, QUARTER, STATEMENT, A4, TICK, TIERS, USD_PER_U, type Init } from './data.ts';
+import { F_ALIVE, F_BADGE, F_CONTR, F_KEEPER, F_TWICE, type P, type State, type Tile, type Target } from './state.ts';
 import { gauss, hashGauss, next } from './rng.ts';
 import { targetName } from './names.ts';
 
@@ -7,9 +7,8 @@ export const AI_LEVELS = [0, 0.15, 0.3, 0.45, 0.6, 0.8, 1.0];
 export interface Derived {
   q: number; Ld: number[]; R: number; pay: number; oh: number; pi: number; piRep: number; H: number; incPen: number;
   slidesRate: number; mTot: number; mRep: number; mcRep: number; mcReal: number; phi: number; E: number; kappa: number;
-  leak: number; dm: number; lambdaC: number; rcEff: number; ai: number; debtCap: number; humans: number; rackYield: number;
-  credit: number; retain: number; creditShare: number; synthShare: number; phiF: number; lights: number; levMax: number; price: number; stockF: number;
-  abMax: number; hdRatio: number; upkeep: number;
+  dm: number; dmTarget: number; reffE: number; pay3: number; rcEff: number; ai: number; debtCap: number; humans: number;
+  phiF: number; levMax: number; price: number; stockF: number; abMax: number; upkeep: number;
 }
 export const PRICE_CAP_MIN = 4, PRICE_CAP_MIN_2 = 3.2, PRICE_MIN_PI = 4;
 const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
@@ -22,30 +21,19 @@ export const mapped = (s: State) => !!s.own.bus || !!s.opt.gary;
 export const assocCost = (s: State) => A1.ASSOC_BASE * A1.ASSOC_RATE ** s.assoc;
 export const partnerCost = (s: State) => A1.PARTNER_BASE * A1.PARTNER_RATE ** s.partners;
 export const tierCost = (s: State, i: number) => TIERS[i].base * TIERS[i].rate ** s.rc[i];
-export const rackCost = (s: State, i: number) => RACKS[i].mins * 60 * Math.max(s.piBase, 1e3) * RACKS[i].rate ** s.racks[i];
 export const humansAlive = (s: State) => s.dn.reduce((a, b) => a + b, 0);
-
-export function mixNorm(s: State) {
-  const c = s.own.bnpl ? s.mix[1] : 0; const t = s.mix[0] + c + s.mix[2] || 1;
-  return [s.mix[0] / t, c / t, s.mix[2] / t];
-}
 
 export function derive(s: State): Derived {
   const ai = aiLevel(s);
-  const lights = s.own.lights ? 1 : 0;
-  const mix = mixNorm(s);
-  const retain = s.act >= 3 ? mix[0] : 0;
-  const creditShare = s.act >= 3 && s.own.bnpl ? mix[1] : 0;
-  const synthShare = s.act >= 3 ? mix[2] : 0;
   // Incidents/hallucinations eat a share of *profit* (plus a sliver of revenue), so a thin early margin never turns into a death spiral.
   const incPen = (s.t < s.incUntil ? A1.INC_PEN : 0) + (s.t < s.hallUntil ? A1.HAL_PEN * 3 : 0);
   const slumpF = (s.t < s.slumpUntil ? s.slump : 1) * (s.S > 60 ? 0.9 : 1);
   const E = s.act === 1 ? humansAlive(s) : s.U + s.I;
   const phi = s.act === 1 ? 0 : E / A2.N0;
-  const d = { ai, lights, retain, creditShare, synthShare, E, phi } as Partial<Derived>;
+  const d = { ai, E, phi } as Partial<Derived>;
   d.levMax = levMax(s); d.abMax = abMax(s);
-  d.phiF = s.F / (Math.max(s.piS, s.piBase * 0.25, 1) * DAYS_PER_YEAR);
-  d.price = A2.P0 * (Math.max(E, 1000) / 1000) ** A2.P_EXP / (1 - Math.min(phi, 0.995)) ** (s.act >= 3 ? 1.0 : 0.5) * (s.opt.rolodex ? 0.95 : 1);
+  d.phiF = s.F / (Math.max(s.piS, s.piBase * (s.act >= 3 ? 0.6 : 0.25), 1) * DAYS_PER_YEAR);
+  d.price = A2.P0 * (Math.max(E, 1000) / 1000) ** A2.P_EXP / (1 - Math.min(phi, 0.995)) ** 0.5 * (s.opt.rolodex ? 0.95 : 1);
   const mTot0 = clamp(s.mBase + (s.act >= 2 ? 2 : 0) + 3 * ai + s.wash - s.S / 10, 4, 40) * s.mMul;
   d.mTot = mTot0;
   d.stockF = 0.3 + 0.7 * clamp(12 / mTot0 / (1 + 0.5 * A2.ADDBACK[s.addback]), 0.25, 1.3);
@@ -70,38 +58,36 @@ export function derive(s: State): Derived {
     const pi = pi0 - Math.min(incPen, 0.9) * Math.max(pi0, 0) - (incPen > 0 ? 0.004 * R : 0);
     const slidesRate = A1.SLIDES_BASE + A1.SLIDES_MGT * q * (s.lc[7] + s.lcx[7]) + A1.ASSOC_SLIDES * s.assoc + 0.4 * s.nContr;
     const mcReal = Math.max(s.piS, 2) * DAYS_PER_YEAR * mTot0 * USD_PER_U;
-    return Object.assign(d, { q, Ld, R, pay: s.pay + s.contrPay, oh, pi, piRep: pi, H, humans: H, incPen, slidesRate: slidesRate * (s.opt.tmpl ? 1.25 : 1), mRep: mTot0, mcRep: mcReal, mcReal, kappa: 0, leak: 0, dm: 1, lambdaC: 0, rcEff: 0, debtCap: 0, rackYield: 0, credit: 0, hdRatio: 0, upkeep }) as Derived;
+    return Object.assign(d, { q, Ld, R, pay: s.pay + s.contrPay, oh, pi, piRep: pi, H, humans: H, incPen, slidesRate: slidesRate * (s.opt.tmpl ? 1.25 : 1), mRep: mTot0, mcRep: mcReal, mcReal, kappa: 0, dm: 1, dmTarget: 1, reffE: 0, pay3: 0, rcEff: 0, debtCap: 0, upkeep }) as Derived;
   }
-  const kappaE = A2.KAPPA + A2.KAPPA_AI * ai + A2.KAPPA_LIGHTS * lights; // economic automation share (Closed Loop)
-  // Human automation share (what the player sees): integrated roles keep few humans, Colleagues shrink it, Lights-Out ends it.
-  const kappa = Math.min(1, A2.HUM_KAPPA + A2.HUM_KAPPA_AI * ai + A2.HUM_KAPPA_LIGHTS * lights);
-  const base = A2.PI_U * s.U + (A2.PI_I + A2.PI_AI * ai + A2.PI_LIGHTS * lights) * s.I;
-  const C = s.I * kappaE;
-  const Ceff = C * (1 - 0.5 * retain);
-  const leak = A3.EPS * phi * phi * Ceff;
-  const c = A3.CREDIT_MAX * creditShare;
-  const credit = c * 1.2 * E;
-  const synthMul = (0.3 + 1.4 * synthShare) * (s.own.engage ? 2 : 1);
-  const rackYield = s.act >= 3 ? (s.racks[0] * RACKS[0].frac + s.racks[1] * RACKS[1].frac) * Math.max(s.piBase, 1e3) * synthMul : 0;
-  const retainCost = 0.5 * retain * C;
-  const upkeep = A1.ASSOC_UPKEEP * s.assoc + A1.PARTNER_UPKEEP * s.partners + A3.RACK_UPKEEP * rackYield + retainCost;
+  // Human automation share (what the player sees): integrated roles keep few humans, Colleagues shrink it.
+  const kappa = Math.min(1, A2.HUM_KAPPA + A2.HUM_KAPPA_AI * ai);
+  const base = A2.PI_U * s.U + (A2.PI_I + A2.PI_AI * ai) * s.I;
+  // Act III: the economy stalls (nobody left to buy) and every re-engaged person brings a slice of demand back, at a contractor's price.
+  const a3 = s.act >= 3;
+  const pi0 = Math.max(s.pi0, 1);
+  const pay3 = a3 ? s.rwRaw * A3.PAY * pi0 : 0;
+  const store = a3 && s.own.store ? A3.STORE * pay3 : 0;
+  const reffE = s.reffRaw;
+  const dmTarget = a3 ? A3.DM0 + (1 - A3.DM0) * (1 - Math.exp(-reffE / A3.RS)) : 1;
+  const dm = a3 ? clamp(s.dm, 0, 1) : 1;
+  const upkeep = A1.ASSOC_UPKEEP * s.assoc + A1.PARTNER_UPKEEP * s.partners;
   const interest = s.debt * A2.INTEREST;
-  const gross = base - leak + credit;
+  const gross = base * dm + store;
   const hal = s.t < s.hallUntil ? 1 - A1.HAL_PEN : 1;
-  const pi = gross * slumpF * hal - upkeep - interest;
+  const pi = gross * slumpF * hal - upkeep - interest - pay3;
   const a = A2.ADDBACK[s.addback];
-  const piRep = pi + a * Math.max(pi, 0) + rackYield;
-  const lambdaC = rackYield > 0 ? rackYield / (Math.max(pi, 0) + rackYield) : 0;
-  let mRep = mTot0;
-  if (s.act >= 3) mRep = mTot0 + (400 * Math.max(0, lambdaC - 0.5) ** 2) / (1.0001 - lambdaC);
+  const piRep = pi + a * Math.max(pi, 0);
+  // The Board's mood is priced into the multiple: every rehire costs a little confidence, and confidence is part of the share price.
+  const mRep = a3 ? mTot0 * ((1 - A3.CONF_MC) + A3.CONF_MC * clamp(s.conf, 0, 1)) : mTot0;
   const rcEff = TIERS.reduce((a2, t, i) => a2 + t.yield * s.rc[i], 0) * s.intensity;
-  const humans = Math.max(0, s.U + s.I * Math.max(0, 1 - kappa) + Math.max(s.hqExcess, -1000 * Math.max(0, 1 - kappa)));
+  const humans = Math.max(0, s.U + s.I * Math.max(0, 1 - kappa) + Math.max(s.hqExcess, -1000 * Math.max(0, 1 - kappa))) + (a3 ? s.reh * A3.COHORT * E : 0);
   return Object.assign(d, {
-    q: 1, Ld: [], R: 0, pay: 0, oh: 0, pi, piRep, H: humans, incPen, kappa, leak, dm: 1 - leak / Math.max(1.2 * E, 1) + c, lambdaC,
-    rcEff, debtCap: levMax(s) * Math.max(s.piRepS, 0) * DAYS_PER_YEAR, humans, rackYield, credit,
+    q: 1, Ld: [], R: 0, pay: 0, oh: 0, pi, piRep, H: humans, incPen, kappa, dm, dmTarget, reffE, pay3,
+    rcEff, debtCap: levMax(s) * Math.max(a3 ? Math.max(s.piRepS, s.piBase) : s.piRepS, 0) * DAYS_PER_YEAR, humans,
     slidesRate: ((A1.SLIDES_BASE + A1.ASSOC_SLIDES * s.assoc + A1.PARTNER_SLIDES * s.partners + (s.own.deck ? 40 * ai : 0)) * (s.opt.tmpl ? 1.25 : 1)),
     mRep, mcRep: Math.max(s.piRepS, 0) * DAYS_PER_YEAR * mRep * USD_PER_U, mcReal: Math.max(s.piS, 0) * DAYS_PER_YEAR * mTot0 * USD_PER_U,
-    hdRatio: s.HD / (A2.N0 * DAYS_PER_YEAR), upkeep,
+    upkeep,
   }) as Derived;
 }
 
@@ -147,11 +133,17 @@ function keeperLoss(s: State, i: number, voluntary: boolean) {
   log(s, 'incident', { n: i }, 'bad'); mail(s, 'a1_incident', { n: i });
   if (s.own.consult) log(s, 'rehire_offer', { n: i });
 }
-export function cut(s: State, i: number): string {
+/** Exit bookkeeping: who went, when, and in which wave (a Planner wave, or a run of single cuts a few seconds apart). */
+function noteExit(s: State, i: number, wave: number) { s.cutT[i] = Math.max(s.t, 0.01); s.cutW[i] = wave; }
+function openWave(s: State): number { s.waves.push(0); return s.waves.length; }
+export function cut(s: State, i: number, hold?: { id: number }): string {
   const e = canCut(s, i); if (e) return e;
   const keeper = !!(s.fl[i] & F_KEEPER);
   s.cash -= sevOf(s, i) * (keeper && mapped(s) ? 5 : 1);
   kill(s, i);
+  let wid = hold ? hold.id : (s.waves.length && s.t - s.lastCutT <= 8 ? s.waves.length : 0);
+  if (!wid) { wid = openWave(s); if (hold) hold.id = wid; }
+  s.waves[wid - 1]++; s.lastCutT = s.t; noteExit(s, i, wid);
   const recent = s.cutTimes.filter((x) => s.t - x < A1.SHOCK_WIN).length; s.cutTimes = s.cutTimes.filter((x) => s.t - x < A1.SHOCK_WIN); s.cutTimes.push(s.t);
   s.M = Math.max(0, s.M - A1.SHOCK * (1 + recent / A1.SHOCK_K));
   s.X += 1; s.cuts++; s.stats.cuts++;
@@ -181,8 +173,8 @@ export function candidates(s: State, d: Derived, dept = -1, truth = false) {
 export function wave(s: State, dept: number, n: number, maxPayback = 600): number {
   const d = derive(s);
   const cs = candidates(s, d, dept, false).filter((x) => x.net > 0.02 && x.pb < maxPayback && !((s.fl[x.i] & F_KEEPER) && mapped(s))).sort((a, b) => a.pb - b.pb);
-  let done = 0;
-  for (const c of cs) { if (done >= n) break; if (cut(s, c.i) === '') done++; else break; }
+  let done = 0; const hold = { id: 0 };
+  for (const c of cs) { if (done >= n) break; if (cut(s, c.i, hold) === '') done++; else break; }
   if (done) log(s, 'wave', { n: done }, 'cut');
   return done;
 }
@@ -201,7 +193,7 @@ function attrition(s: State, dt: number, M: number) {
     let r = next(s) * tot, pick = -1;
     for (let i = 0; i < s.dept.length; i++) if (isHuman(s, i) && !(s.fl[i] & F_BADGE)) { r -= s.c[i] ** 1.5; if (r <= 0) { pick = i; break; } }
     if (pick >= 0) {
-      kill(s, pick); s.stats.cuts += 0;
+      kill(s, pick); noteExit(s, pick, 0);
       if (s.fl[pick] & F_KEEPER) keeperLoss(s, pick, true);
       s.flags.attr = (s.flags.attr || 0) + 1;
       if (s.flags.attr <= 3 || s.flags.attr % 25 === 0) log(s, 'attr', { n: pick });
@@ -231,7 +223,7 @@ function cip(s: State, d: Derived, dt: number) {
 // ---------- initiatives ----------
 export function visible(s: State, it: Init): boolean {
   if (it.act > s.act && s.act < 4) return false;
-  if (it.act < s.act && !s.own[it.id]) return it.act === 1 && s.act >= 2 ? false : true;
+  if (it.act < s.act && !s.own[it.id]) return it.act === 1 && s.act >= 2 ? false : s.act >= 3 ? false : true;
   if (it.req) return !!s.own[it.req] || !!s.own[it.id];
   const E = s.U + s.I;
   switch (it.gate) {
@@ -248,8 +240,6 @@ export function visible(s: State, it: Init): boolean {
     case 'e40k': return s.act >= 2 && E >= 40000;
     case 'e8m': return s.act >= 2 && E >= 8e6;
     case 'a3': return s.act >= 3;
-    case 'phi40': return s.act >= 3 && E / A2.N0 >= 0.4;
-    case 'phi30': return s.act >= 3 && E / A2.N0 >= 0.3;
   }
   return true;
 }
@@ -278,12 +268,10 @@ export function buy(s: State, id: string): string {
   s.slides -= c.slides; s.cash -= c.cash; s.own[id] = 1; s.lastBuyT = s.t;
   log(s, 'buy_' + id, undefined, 'good');
   if (id === 'memo') startAct2(s);
-  if (id === 'regcap') mail(s, 'a3_regcap');
   if (id === 'earn') mail(s, 'a1_earn');
   if (id === 'copilot') mail(s, 'a1_copilot');
   if (id === 'ab1') { s.addback = 1; mail(s, 'a2_ab1'); }
   if (id === 'statement') mail(s, 'a2_stmt');
-  if (id === 'bnpl') mail(s, 'a3_bnpl');
   if (id === 'ab2' && s.addback >= 1) s.addback = 2;
   return '';
 }
@@ -297,10 +285,6 @@ export function buyGen(s: State, kind: string, idx = 0): string {
     const c = tierCost(s, idx); if (s.cash < c) return 'cash'; s.cash -= c; s.rc[idx]++; s.lastBuyT = s.t;
     if (idx === 1 && s.rc[1] === 1) { s.flags.redesign = s.t; mail(s, 'a2_redesign'); }
     return '';
-  }
-  if (kind === 'rack') {
-    if (s.act < 3) return 'locked'; if (idx === 0 && !s.own.synth1) return 'locked'; if (idx === 1 && !s.own.synth2) return 'locked';
-    const c = rackCost(s, idx); if (s.cash < c) return 'cash'; s.cash -= c; s.racks[idx]++; s.lastBuyT = s.t; return '';
   }
   return 'unknown';
 }
@@ -326,33 +310,46 @@ function startAct2(s: State) {
   s.piRepS = s.piS;
   mail(s, 'a2_start'); log(s, 'act2', undefined, 'good'); log(s, 'zoom');
 }
+/** The first person who was ever cut and is still out: the one who comes back last, as Head of Efficiency. */
+export function pickFirst(s: State): number {
+  let best = -1;
+  for (let pass = 0; pass < 2 && best < 0; pass++) {
+    for (let i = 0; i < s.dept.length; i++) {
+      if ((s.fl[i] & (F_ALIVE | F_BADGE)) || s.cutT[i] <= 0 || (pass === 0 && s.cutW[i] <= 0)) continue;
+      if (best < 0 || s.cutT[i] < s.cutT[best]) best = i;
+    }
+  }
+  if (best < 0) for (let i = 0; i < s.dept.length; i++) if (!(s.fl[i] & (F_ALIVE | F_BADGE))) { best = i; break; }
+  return best;
+}
 function startAct3(s: State) {
   s.act = 3; s.actT[1] = s.t;
-  mail(s, 'a3_orc'); log(s, 'act3', undefined, 'good');
+  s.pi0 = Math.max(s.piS, s.piBase, 1); s.dm = 1; s.conf = 1; s.reh = 0; s.rstack = []; s.reffRaw = 0; s.rwRaw = 0;
+  s.first = pickFirst(s);
+  s.cash = Math.max(s.cash, A3.GRANT * s.pi0); // the Board's contingency facility: enough to start, not enough to finish
+  mail(s, 'a3_start'); log(s, 'act3', undefined, 'good');
 }
 function startAct4(s: State) {
-  s.act = 4; s.actT[2] = s.t; s.a4 = { step: 0, prog: 0, running: false, tone: [], badge: '', nps: 7, sun: 0, fast: 0 };
-  mail(s, 'a4_start'); log(s, 'act4', undefined, 'good');
+  s.act = 4; s.actT[2] = s.t; s.a4 = { step: 0, prog: 0, running: false, tone: [], badge: '', nps: 7, sun: 0, fast: 0, c: 0, v: 0 };
+  mail(s, 'a4_start', { n: s.first, me: s.name }); log(s, 'act4', { n: s.first }, 'good');
 }
 
 // ---------- Act II+ actions ----------
 export function day1Frac(s: State) { return clamp(A2.DAY1_BASE + A2.DAY1_INT * s.intensity, 0.3, 0.55); }
 export function bidCost(s: State, d: Derived, size: number) { return size * d.price * d.stockF; }
 /** Pure check (no side effects): why a bid on this target cannot go through right now ('' = it can). */
-export function canBid(s: State, d: Derived, tg: Target): '' | 'act' | 'orc' | 'cap' | 'cash' {
-  if (s.act < 2 || s.act > 3) return 'act';
-  if (s.act === 3 && !s.own.regcap && (s.U + s.I + tg.size) / A2.N0 > A3.ORC_PHI) return 'orc';
+export function canBid(s: State, d: Derived, tg: Target): '' | 'act' | 'cap' | 'cash' {
+  if (s.act !== 2) return 'act';
   if (s.U + s.I + tg.size > A2.N0 * 0.995) return 'cap';
   const cost = bidCost(s, d, tg.size); const room = Math.max(0, d.debtCap - s.debt);
   if (s.cash + room * 0.9 < cost) return 'cash';
   return '';
 }
 export function bid(s: State, targetId: number): string {
-  if (s.act < 2 || s.act > 3) return 'act';
+  if (s.act !== 2) return 'act';
   const ti = s.targets.findIndex((t) => t.id === targetId); if (ti < 0) return 'none';
   const d = derive(s); const tg = s.targets[ti];
   const why = canBid(s, d, tg);
-  if (why === 'orc') { mail(s, 'a3_orc_block'); return 'orc'; }
   if (why) return why;
   const cost = bidCost(s, d, tg.size);
   const room = Math.max(0, d.debtCap - s.debt);
@@ -400,7 +397,6 @@ function mergeTiles(s: State) {
 export function repay(s: State, amt = Infinity) { const p = Math.min(s.debt, s.cash, amt); s.cash -= p; s.debt -= p; return p; }
 export function setAddback(s: State, lvl: number) { s.addback = clamp(Math.round(lvl), 0, abMax(s)); }
 export function setIntensity(s: State, k: number) { s.intensity = clamp(k, 0.5, 2); }
-export function setMix(s: State, r: number, c: number, y: number) { s.mix = [Math.max(0, r), Math.max(0, c), Math.max(0, y)]; }
 export function aiwash(s: State): string {
   if (!s.own.aiwash) return 'locked'; if (s.t - s.washAt < 60) return 'cd'; s.wash = Math.min(3, s.wash + 0.5); s.washAt = s.t; log(s, 'aiwash'); return '';
 }
@@ -420,10 +416,6 @@ export function auditChoice(s: State, ch: 'lunch' | 'restate' | 'switch' | 'igno
   if (ch === 'ignore') s.ignoreUntil = s.t + 300;
   s.pendAudit = 0; s.stats.audits++; log(s, 'audit_' + ch);
 }
-export function securitize(s: State): string {
-  if (!s.own.secur) return 'locked'; const gain = 0.5 * s.HD; if (gain <= 0) return 'none';
-  s.cash += gain; s.HD *= 0.5; s.minskyUntil = s.t + 600; s.S = Math.min(100, s.S + 10); log(s, 'securitize'); return '';
-}
 export function a4Run(s: State): string {
   if (s.act !== 4) return 'act'; const st = s.a4;
   if (st.running) return 'busy'; if (st.step === 4) return 'choose'; if (st.step >= 6) return 'done';
@@ -438,7 +430,23 @@ export function a4Stance(s: State): 'agree' | 'question' | 'resign' | 'mixed' | 
   const c = [0, 0, 0]; for (const x of s.a4.tone) if (x >= 0 && x <= 2) c[x]++; const n = c[0] + c[1] + c[2]; if (!n) return 'none';
   const m = Math.max(...c); if (c.filter((x) => x === m).length > 1) return 'mixed'; return (['agree', 'question', 'resign'] as const)[c.indexOf(m)];
 }
-export function a4Badge(s: State, ch: 'A' | 'B') { if (s.act === 4 && s.a4.step === 4) { s.a4.badge = ch; s.a4.step = 5; s.a4.prog = 0; s.a4.running = false; log(s, 'badge_' + ch); } }
+/** How cruel Act I was, 0..1 (the reviewer reads the file). Waves of 10+ count double against you, as do incidents, lawsuits and the Board re-cutting its own rehires. */
+export function cruelty(s: State): { c: number; parts: Record<string, number> } {
+  const cuts = Math.max(1, s.stats.cuts); let big = 0; for (const w of s.waves) if (w >= 10) big += w;
+  const parts = {
+    cuts: 0.32 * Math.min(1, s.stats.cuts / 700), waves: 0.22 * Math.min(1, big / cuts), incidents: 0.16 * Math.min(1, s.stats.incidents / 5),
+    lawsuits: 0.1 * Math.min(1, s.stats.lawsuits / 2), interv: 0.1 * Math.min(1, s.interv / 3), scandal: 0.1 * Math.min(1, s.S / 100),
+  };
+  return { c: Object.values(parts).reduce((a, b) => a + b, 0), parts };
+}
+/** Verdict bands: 0 retained, 1 eliminated (appeal possible), 2 eliminated (appeal denied). */
+export const VERDICT = { KEEP: 0.3, DENY: 0.62 };
+export function a4Verdict(s: State) {
+  const { c } = cruelty(s); const st = a4Stance(s);
+  const adj = st === 'agree' ? -0.04 : st === 'question' ? 0.03 : 0; const cc = clamp(c + adj, 0, 1);
+  s.a4.c = cc; s.a4.v = cc < VERDICT.KEEP ? 0 : cc < VERDICT.DENY ? 1 : 2;
+}
+export function a4Badge(s: State, ch: 'A' | 'B') { if (s.act === 4 && s.a4.step === 4) { if (ch === 'B' && s.a4.v === 2) return; s.a4.badge = ch; s.a4.step = 5; s.a4.prog = 0; s.a4.running = false; log(s, 'badge_' + ch); } }
 export function a4Submit(s: State, nps: number) { if (s.act === 4 && s.a4.step === 6) { s.a4.nps = nps; s.ended = s.a4.badge === 'B' ? 'B' : 'A'; log(s, 'ended'); } }
 
 // ---------- stepping ----------
@@ -522,7 +530,7 @@ function stepAct1(s: State, d: Derived, dt: number, off: boolean) {
 
 function stepAct2(s: State, d: Derived, dt: number, off: boolean) {
   // integration
-  const mv = Math.min(s.U, (d.rcEff / A2.KAPPA) * dt * (off ? 0.5 : 1));
+  const mv = s.act >= 3 ? 0 : Math.min(s.U, (d.rcEff / A2.KAPPA) * dt * (off ? 0.5 : 1)); // integration stops when the stall starts
   if (mv > 0) {
     s.U -= mv; s.I += mv;
     let cult = 1; let big = 0; for (const t of s.tiles) if (t.left > big) { big = t.left; cult = CULTURES[t.cult]?.mul ?? 1; }
@@ -535,7 +543,7 @@ function stepAct2(s: State, d: Derived, dt: number, off: boolean) {
   if ((s.flags.waveAcc ?? 0) > 0 && (s.t >= (s.flags.waveAt ?? 0) + A2.WAVE_T || s.U < 1)) { applyWave(s, !off); s.flags.waveAt = s.t; }
   s.S = Math.max(0, s.S - A2.SCANDAL_DECAY * dt);
   if (s.hqExcess > 0) s.hqExcess *= Math.exp(-dt / 120);
-  if (off) { s.S = Math.max(0, s.S - 0); if (s.act === 3) { s.HD *= 1; } return; }
+  if (off) return;
   // hallucinations
   const ai = d.ai;
   if (ai > 0 && s.t > s.hallUntil) {
@@ -547,7 +555,7 @@ function stepAct2(s: State, d: Derived, dt: number, off: boolean) {
   if (a > 0) s.F += a * Math.max(d.pi, 0) * dt * (s.opt.clean ? 0.75 : 1);
   s.stats.maxFiction = Math.max(s.stats.maxFiction, d.phiF);
   const hz = A2.AUDIT_H * Math.max(0, d.phiF - A2.AUDIT_FROM) * (s.t < s.immuneUntil ? 0 : 1) * (s.t < s.ignoreUntil ? 3 : 1);
-  if (hz > 0 && next(s) < 1 - Math.exp(-hz * dt)) reckoning(s, d);
+  if (s.act < 3 && hz > 0 && next(s) < 1 - Math.exp(-hz * dt)) reckoning(s, d); // Act III has its own punishment: the stall
   // audits
   const next_ = A2.AUDIT_FIRST * 10 ** s.auditMark;
   if (!s.pendAudit && d.mcRep >= next_ && s.auditMark < 4) { s.auditMark++; s.pendAudit = s.t + 120; mailAny(s, 'a2_audit'); }
@@ -557,7 +565,7 @@ function stepAct2(s: State, d: Derived, dt: number, off: boolean) {
     const pay = Math.min(s.debt - d.debtCap, Math.max(0, d.pi) * 0.5 * dt + Math.max(0, s.cash) * 0.01 * dt);
     s.debt -= pay; s.cash -= Math.min(pay, s.cash);
     if (!s.flags.cov) { s.flags.cov = 1; mail(s, 'a2_covenant'); }
-    if (s.debt > d.debtCap * 1.5 && s.cash < 60 * Math.abs(d.pi) + 1) {
+    if (s.act < 3 && s.debt > d.debtCap * 1.5 && s.cash < 60 * Math.abs(d.pi) + 1) {
       const sell = 0.1 * (s.U + s.I); const fromU = Math.min(s.U, sell); s.U -= fromU; s.I -= sell - fromU; s.debt = Math.max(0, s.debt - sell * d.price * 0.5); log(s, 'firesale', undefined, 'bad');
     }
   }
@@ -586,23 +594,107 @@ function reckoning(s: State, d: Derived) {
   log(s, 'reckoning', { n: Math.round(x * 100) }, 'bad'); mail(s, 'a2_reckoning');
 }
 function stepAct3(s: State, d: Derived, dt: number) {
-  mail(s, 'a3_leak');
-  if (s.own.atm) { s.cash += A3.ATM * Math.max(s.piRepS, 0) * DAYS_PER_YEAR * d.mTot * USD_PER_U * dt; s.mMul *= Math.exp(-A3.ATM * 40 * dt); }
-  // household debt & Minsky
-  const c = A3.CREDIT_MAX * d.creditShare;
-  s.HD += (c * 1.2 * d.E * A3.HD_ACC - A3.HD_DECAY * s.HD) * dt;
-  const rho = d.hdRatio;
-  if (rho > 0.5) mail(s, 'a3_minsky_warn');
-  if (rho > A3.MINSKY_FROM && s.t > s.minskyUntil) {
-    const h = (A3.MINSKY_H * (rho - A3.MINSKY_FROM)) / 0.2;
-    if (next(s) < 1 - Math.exp(-h * dt)) { s.HD *= 0.4; s.slump = 0.4; s.slumpUntil = s.t + 300; s.mMul *= 0.65; s.flags.minsky = (s.flags.minsky || 0) + 1; log(s, 'minsky', undefined, 'bad'); mail(s, 'a3_minsky'); }
+  // Demand follows the rehires, with a lag (and falls faster than it climbs).
+  const tgt = d.dmTarget; const tau = tgt > s.dm ? A3.TAU_UP : A3.TAU_DN;
+  s.dm += (tgt - s.dm) * (1 - Math.exp(-dt / tau));
+  // The Board forgives, slowly.
+  s.conf = Math.min(1, s.conf + (1 - s.conf) * (dt / (s.own.ir ? A3.TAU_CONF_IR : A3.TAU_CONF)));
+  if (s.conf < A3.INTERV_AT && s.rstack.length && !s.flags.finAt) intervene(s);
+  if (s.dm < 0.7 && s.t > s.actT[1] + 12) mail(s, 'a3_stall');
+  if (s.dm < 0.5 || s.t > s.actT[1] + 90) s.flags.stall = 1; // the stall has happened (or has had its 90 seconds): the finale can no longer be skipped by rehiring fast
+  if (s.reh >= 1) mail(s, 'a3_first');
+  if (s.reh >= 10) mail(s, 'a3_m1');
+  if (s.flags.stall && s.dm >= 0.5) mail(s, 'a3_m2');
+  if (s.flags.stall && s.dm >= 0.65) mail(s, 'a3_m3');
+  if (s.flags.stall && s.dm >= A3.DM_FIN - 0.001) mail(s, 'a3_ready');
+  if (s.flags.finAt && s.t >= s.flags.finAt + A3.FIN_WAIT) startAct4(s);
+}
+// ---------- Act III: The Rehire ----------
+export const grudgeOf = (s: State, i: number) => { const w = s.cutW[i]; return w > 0 ? clamp((s.waves[w - 1] ?? 1) / A3.GRUDGE_N, 0, 1) : 0; };
+export interface Offer { i: number; ret: number; pay: number; eff: number; pen: number; grudge: number; value: number }
+/** What bringing one person back costs and does: retainer (cash), contractor bill (per second), demand, and the Board's reaction. */
+export function offer(s: State, i: number): Offer {
+  const k = s.dept[i]; const pi0 = Math.max(s.pi0, 1); const g = grudgeOf(s, i);
+  const ret = A3.RET0 * pi0 * A3.RET_G ** s.reh * (0.6 + 0.4 * s.w[i]) * (1 + A3.GRUDGE * g);
+  const pay = s.w[i] * A3.PAY * pi0;
+  const eff = DEPT3[k].dm * (0.7 + 0.3 * s.c[i]);
+  const pen = A3.PEN * DEPT3[k].bp * (s.own.flex ? A3.FLEX : 1);
+  const value = eff / (ret / (A3.RET0 * pi0) + pen * 30);
+  return { i, ret, pay, eff, pen, grudge: g, value };
+}
+export function canReengage(s: State, i: number): '' | 'act' | 'here' | 'badge' | 'first' | 'cash' | 'done' {
+  if (s.act !== 3) return 'act'; if (s.flags.finAt) return 'done';
+  if (s.fl[i] & F_BADGE) return 'badge'; if (s.fl[i] & F_ALIVE) return 'here'; if (i === s.first) return 'first';
+  if (s.cutT[i] <= 0) return 'here';
+  if (s.cash < offer(s, i).ret) return 'cash';
+  return '';
+}
+/** Everyone who can be brought back (not the first, not #1000, not anyone still on the floor). */
+export function pool3(s: State): number[] { const out: number[] = []; for (let i = 0; i < s.dept.length; i++) if (!(s.fl[i] & (F_ALIVE | F_BADGE)) && i !== s.first && s.cutT[i] > 0) out.push(i); return out; }
+function recalc3(s: State) {
+  let e = 0, w = 0; for (const i of s.rstack) { e += DEPT3[s.dept[i]].dm * (0.7 + 0.3 * s.c[i]); w += s.w[i]; } s.reffRaw = e; s.rwRaw = w;
+}
+export function reengage(s: State, i: number): string {
+  const why = canReengage(s, i); if (why) return why;
+  const o = offer(s, i);
+  s.cash -= o.ret; s.fl[i] |= F_ALIVE | F_CONTR; s.dn[s.dept[i]]++;
+  s.reh++; s.rstack.push(i); recalc3(s); s.conf = Math.max(0, s.conf - o.pen); s.lastBuyT = s.t;
+  if (s.reh <= 3 || s.reh % 10 === 0) log(s, 'reeng', { n: i, k: s.reh }, 'good');
+  return '';
+}
+/** "Re-engagement Wave": the n best-value people you can afford, stopping before the Board loses patience (so it is never silent: the reason comes back). */
+export function reengageBest(s: State, n: number): { done: number; why: '' | 'locked' | 'cash' | 'board' | 'none' } {
+  if (!s.own.alumni) return { done: 0, why: 'locked' };
+  const list = pool3(s).map((i) => offer(s, i)).sort((a, b) => b.value - a.value);
+  let done = 0, why: '' | 'cash' | 'board' | 'none' = list.length ? '' : 'none';
+  for (const o of list) {
+    if (done >= n) break;
+    const cur = offer(s, o.i);
+    if (s.cash < cur.ret) { why = 'cash'; break; }
+    if (s.conf - cur.pen < A3.SAFE) { why = 'board'; break; }
+    if (reengage(s, o.i) === '') done++;
   }
-  // closure events
-  if (d.lambdaC >= 0.5) mail(s, 'a3_closure50');
-  if (d.lambdaC >= 0.8 && !s.lastCust) { s.lastCust = 1; s.flags.lcAt = s.t; log(s, 'lastcust', undefined, 'good'); mail(s, 'a3_lastcust'); }
-  if (s.lastCust === 1 && s.t > s.flags.lcAt + 20) s.lastCust = 2;
-  s.closureSeen = Math.max(s.closureSeen, d.lambdaC);
-  if (d.lambdaC >= A3.CLOSURE && d.humans <= A3.HUMANS_END * s.peakH && s.lastCust === 2) startAct4(s);
+  if (done) log(s, 'reeng_wave', { n: done }, 'good');
+  return { done, why };
+}
+/** The Board "right-sizes" the most recent rehires (they go out a second time) and takes the multiple back up. */
+function intervene(s: State) {
+  const k = Math.min(A3.INTERV_N, s.rstack.length); const gone = s.rstack.splice(s.rstack.length - k, k);
+  const wid = openWave(s);
+  for (const i of gone) { s.fl[i] &= ~(F_ALIVE | F_CONTR); s.fl[i] |= F_TWICE; s.dn[s.dept[i]]--; s.cutT[i] = s.t; s.cutW[i] = wid; s.waves[wid - 1]++; }
+  s.reh -= k; recalc3(s); s.conf = A3.INTERV_TO; s.interv++; s.flags.recut = (s.flags.recut ?? 0) + k;
+  log(s, 'interv', { n: gone[gone.length - 1], k, v: s.interv }, 'bad'); mailAny(s, 'a3_interv', { n: gone[gone.length - 1], k });
+}
+/** Extra demand (as a share of full demand) that this person would add once the lag has played out. */
+export function dmGain(s: State, eff: number, d: Derived) { return A3.DM0 + (1 - A3.DM0) * (1 - Math.exp(-(d.reffE + eff) / A3.RS)) - d.dmTarget; }
+/** Seconds until Board confidence has recovered enough to take `pen` without falling below `line`. */
+export function confWait(s: State, pen: number, line = A3.INTERV_AT + 0.05): number {
+  const need = line + pen; if (s.conf >= need) return 0; if (need >= 1) return Infinity;
+  const tau = s.own.ir ? A3.TAU_CONF_IR : A3.TAU_CONF; return tau * Math.log((1 - s.conf) / (1 - need));
+}
+/** The Act III goal card: which mandate you are on, and what is actually holding you back right now. */
+export interface Goal3 { mandate: 1 | 2 | 3 | 4; have: number; need: number; limit: '' | 'cash' | 'board' | 'finale' | 'done'; eta: number; ret: number; pen: number }
+export function goal3(s: State, d: Derived): Goal3 {
+  const mandate = s.reh < 10 && !s.flags.stall ? 1 : s.dm < 0.5 ? 2 : s.dm < A3.DM_FIN - 0.001 ? 3 : 4;
+  const have = mandate === 1 ? s.reh : s.dm; const need = mandate === 1 ? 10 : mandate === 2 ? 0.5 : A3.DM_FIN;
+  if (s.flags.finAt) return { mandate: 4, have, need, limit: 'done', eta: Math.max(0, s.flags.finAt + A3.FIN_WAIT - s.t), ret: 0, pen: 0 };
+  if (mandate === 4) { const c = finaleCost(s); return s.cash >= c ? { mandate, have, need, limit: 'finale', eta: 0, ret: c, pen: 0 } : { mandate, have, need, limit: 'cash', eta: d.pi > 0 ? (c - s.cash) / d.pi : Infinity, ret: c, pen: 0 }; }
+  let best: Offer | null = null; for (const i of pool3(s)) { const o = offer(s, i); if (!best || o.value > best.value) best = o; }
+  if (!best) return { mandate, have, need, limit: '', eta: 0, ret: 0, pen: 0 };
+  if (s.cash < best.ret) return { mandate, have, need, limit: 'cash', eta: d.pi > 0 ? (best.ret - s.cash) / d.pi : Infinity, ret: best.ret, pen: best.pen };
+  const w = confWait(s, best.pen); if (w > 0) return { mandate, have, need, limit: 'board', eta: w, ret: best.ret, pen: best.pen };
+  return { mandate, have, need, limit: '', eta: 0, ret: best.ret, pen: best.pen };
+}
+export const finaleCost = (s: State) => A3.FIN_RET * Math.max(s.pi0, 1);
+export function finaleState(s: State): '' | 'act' | 'dm' | 'cash' | 'done' {
+  if (s.act !== 3) return 'act'; if (s.flags.finAt) return 'done';
+  if (!s.flags.stall || s.dm < A3.DM_FIN - 0.001) return 'dm'; if (s.cash < finaleCost(s)) return 'cash'; return '';
+}
+export function offerHead(s: State): string {
+  const why = finaleState(s); if (why) return why;
+  const i = s.first; s.cash -= finaleCost(s); s.fl[i] |= F_ALIVE | F_CONTR; s.dn[s.dept[i]]++; s.flags.finAt = s.t;
+  log(s, 'hoe', { n: i }, 'good'); mailAny(s, 'a3_hoe', { n: i });
+  return '';
 }
 function stepAct4(s: State, dt: number) {
   const st = s.a4;
@@ -612,8 +704,9 @@ function stepAct4(s: State, dt: number) {
     if (st.prog >= need) {
       st.running = false; st.prog = 0;
       if (st.step === 5) { st.step = 6; } else st.step++;
+      if (st.step === 4) a4Verdict(s);
       log(s, 'a4_step' + (st.step - 1));
-      mailAny(s, 'a4_r' + (st.step - 1));
+      mailAny(s, 'a4_r' + (st.step - 1), { n: s.first, me: s.name });
     }
   }
 }
@@ -637,12 +730,12 @@ function mails(s: State, d: Derived) {
 
 export function summary(s: State) {
   const d = derive(s);
-  return { t: s.t, act: s.act, H: d.humans, cash: s.cash, pi: d.pi, mc: d.mcRep, M: s.M, X: s.X, S: s.S, E: d.E, phi: d.phi, lambdaC: d.lambdaC };
+  return { t: s.t, act: s.act, H: d.humans, cash: s.cash, pi: d.pi, mc: d.mcRep, M: s.M, X: s.X, S: s.S, E: d.E, phi: d.phi, dm: d.dm, conf: s.conf, reh: s.reh };
 }
 export { gauss };
 
 // ---------- "Next goal": what is actually blocking, and for how long ----------
-export interface Goal { id: string; blocker: 'slides' | 'cash' | 'h' | 'ready'; eta: number; need: number; have: number; orc?: boolean }
+export interface Goal { id: string; blocker: 'slides' | 'cash' | 'h' | 'ready'; eta: number; need: number; have: number }
 export function nextGoal(s: State, d: Derived): Goal | null {
   let best: Goal | null = null;
   for (const it of INITS) {
@@ -656,14 +749,6 @@ export function nextGoal(s: State, d: Derived): Goal | null {
     else if (eS >= eC) g = { id: it.id, blocker: 'slides', eta: eS, need: c.slides, have: s.slides };
     else g = { id: it.id, blocker: 'cash', eta: eC, need: c.cash, have: s.cash };
     if (!best || g.eta < best.eta || (g.eta === best.eta && g.blocker === 'ready' && best.blocker !== 'ready')) best = g;
-  }
-  // Every target is walled off by the Office of Reasonable Concern: the real next goal is whatever removes the wall.
-  if (s.act === 3 && !s.own.regcap && s.targets.length && s.targets.every((tg) => canBid(s, d, tg) === 'orc')) {
-    const it = INITS.find((x) => x.id === 'regcap')!; const c = costOf(s, it);
-    const eS = c.slides > s.slides ? (c.slides - s.slides) / Math.max(d.slidesRate, 1e-6) : 0;
-    const eC = c.cash > s.cash ? (d.pi > 1e-6 ? (c.cash - s.cash) / d.pi : Infinity) : 0;
-    if (eS === 0 && eC === 0) return { id: it.id, blocker: 'ready', eta: 0, need: 0, have: 0, orc: true };
-    return eS >= eC ? { id: it.id, blocker: 'slides', eta: eS, need: c.slides, have: s.slides, orc: true } : { id: it.id, blocker: 'cash', eta: eC, need: c.cash, have: s.cash, orc: true };
   }
   return best;
 }

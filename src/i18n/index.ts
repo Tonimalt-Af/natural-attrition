@@ -15,7 +15,7 @@ function person(s: State, i: number, hr: boolean) {
 export function logText(s: State, l: LogLine, hrDecay = false): string {
   let k = l.k; const p: Record<string, string | number> = { ...(l.p as Record<string, string | number>) };
   if (k.startsWith('buy_')) { const id = k.slice(4); return `Approved: ${initName(id)}.`; }
-  if (k === 'cut' || k === 'attr' || k === 'handover' || k === 'incident' || k === 'rehire_offer' || k === 'rehired') {
+  if (k === 'cut' || k === 'attr' || k === 'handover' || k === 'incident' || k === 'rehire_offer' || k === 'rehired' || k === 'reeng' || k === 'interv' || k === 'hoe' || k === 'act4') {
     const q = person(s, p.n as number, hrDecay && k === 'cut'); Object.assign(p, q);
     if (hrDecay && k === 'cut') k = 'cut_hr';
   }

@@ -1,5 +1,5 @@
 import { DEPTS } from '../engine/data.ts';
-import { F_ALIVE, F_BADGE, F_CONTR, F_KEEPER, type State, type Tile } from '../engine/state.ts';
+import { F_ALIVE, F_BADGE, F_CONTR, F_KEEPER, F_TWICE, type State, type Tile } from '../engine/state.ts';
 import { netValue, mapped, noiseLevel, tileHumans, type Derived } from '../engine/sim.ts';
 import { hash01 } from '../engine/rng.ts';
 
@@ -27,14 +27,14 @@ function shape(ctx: CanvasRenderingContext2D, k: number, x: number, y: number, r
   }
 }
 
-export interface Ghost { x: number; y: number; t0: number; col: string }
+export interface Ghost { x: number; y: number; t0: number; col: string; kind?: 'in' }
 export function floorLayout(w: number) { const cell = Math.floor(w / COLS); return { cell, gw: cell * COLS, gh: cell * ROWS, strip: 26 }; }
 
 export function drawFloor(ctx: CanvasRenderingContext2D, w: number, s: State, d: Derived, sel: number, hover: number, ghosts: Ghost[], now: number, reduced: boolean, dismantle = 0) {
   const { cell, gw, gh, strip } = floorLayout(w);
   const ink = css('--ink'), muted = css('--muted'), accent = css('--accent'), bg = css('--surface');
   ctx.clearRect(0, 0, w, gh + strip); ctx.fillStyle = bg; ctx.fillRect(0, 0, w, gh + strip);
-  const r = cell * 0.36; const showEst = !!s.own.stack || noiseLevel(s) > 0; const keepers = mapped(s);
+  const a3 = s.act === 3; const r = cell * 0.36; const showEst = !a3 && (!!s.own.stack || noiseLevel(s) > 0); const keepers = !a3 && mapped(s);
   const nv: number[] = showEst ? [] : [];
   let lo = Infinity, hi = -Infinity;
   if (showEst) for (let i = 0; i < s.dept.length; i++) { if (!(s.fl[i] & F_ALIVE)) { nv.push(0); continue; } const v = netValue(s, d, i, false); nv.push(v); if (v < lo) lo = v; if (v > hi) hi = v; }
@@ -43,10 +43,21 @@ export function drawFloor(ctx: CanvasRenderingContext2D, w: number, s: State, d:
   for (let i = 0; i < maxI; i++) {
     const x = (i % COLS) * cell + cell / 2, y = Math.floor(i / COLS) * cell + cell / 2; const f = s.fl[i];
     const dep = DEPTS[s.dept[i]];
+    if (a3 && !(f & F_ALIVE)) {
+      // the people who were cut: hollow rings you can click; the first one out is gold; the Board's re-cuts are red
+      const gold = i === s.first, twice = !!(f & F_TWICE);
+      ctx.strokeStyle = gold ? accent : twice ? css('--bad') : muted; ctx.globalAlpha = gold ? 1 : twice ? 0.8 : 0.5; ctx.lineWidth = gold ? 2 : 1.3;
+      ctx.beginPath(); ctx.arc(x, y, r * (gold ? 1.0 : 0.82), 0, 6.2832); ctx.stroke();
+      if (gold) { ctx.beginPath(); ctx.arc(x, y, r * (1.35 + (reduced ? 0 : 0.18 * Math.sin(now / 350))), 0, 6.2832); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+      if (i === sel || i === hover) { ctx.strokeStyle = accent; ctx.lineWidth = 2.5; ctx.strokeRect(x - cell / 2 + 1, y - cell / 2 + 1, cell - 2, cell - 2); }
+      continue;
+    }
     if (!(f & F_ALIVE)) { ctx.strokeStyle = muted; ctx.globalAlpha = 0.12; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x, y, 1.2, 0, 6.2832); ctx.stroke(); ctx.globalAlpha = 1; continue; }
-    const alpha = showEst ? 0.3 + 0.7 * (1 - (nv[i] - lo) / span) : 0.9;
+    const alpha = a3 ? ((f & F_CONTR) ? 1 : 0.3) : showEst ? 0.3 + 0.7 * (1 - (nv[i] - lo) / span) : 0.9;
     ctx.globalAlpha = alpha;
-    if (f & F_CONTR) { shape(ctx, s.dept[i], x, y, r); ctx.strokeStyle = dep.color; ctx.lineWidth = 1.6; ctx.stroke(); }
+    if (a3 && (f & F_CONTR)) { ctx.fillStyle = dep.color; shape(ctx, s.dept[i], x, y, r); ctx.fill(); ctx.globalAlpha = 0.9; ctx.strokeStyle = accent; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(x, y, r * 1.45, 0, 6.2832); ctx.stroke(); }
+    else if (f & F_CONTR) { shape(ctx, s.dept[i], x, y, r); ctx.strokeStyle = dep.color; ctx.lineWidth = 1.6; ctx.stroke(); }
     else { ctx.fillStyle = dep.color; shape(ctx, s.dept[i], x, y, r); ctx.fill(); }
     ctx.globalAlpha = 1;
     if (f & F_BADGE) { ctx.setLineDash([2, 2]); ctx.strokeStyle = ink; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(x, y, r * 1.5, 0, 6.2832); ctx.stroke(); ctx.setLineDash([]); }
@@ -54,10 +65,10 @@ export function drawFloor(ctx: CanvasRenderingContext2D, w: number, s: State, d:
     if (i === sel || i === hover) { ctx.strokeStyle = accent; ctx.lineWidth = 2.5; ctx.strokeRect(x - cell / 2 + 1, y - cell / 2 + 1, cell - 2, cell - 2); }
   }
   // fading ghosts (cut animation)
-  for (const g of ghosts) { const k = Math.min(1, (now - g.t0) / (reduced ? 120 : 420)); if (k >= 1) continue; ctx.globalAlpha = 1 - k; ctx.fillStyle = g.col; ctx.beginPath(); ctx.arc(g.x, g.y - (reduced ? 0 : 10 * k), r, 0, 6.2832); ctx.fill(); ctx.globalAlpha = 1; }
+  for (const g of ghosts) { const k = Math.min(1, (now - g.t0) / (reduced ? 120 : 420)); if (k >= 1) continue; if (g.kind === 'in') { ctx.globalAlpha = 1 - k; ctx.strokeStyle = g.col; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(g.x, g.y, r * (1.2 + (reduced ? 0 : 2.6 * k)), 0, 6.2832); ctx.stroke(); ctx.globalAlpha = 1; continue; } ctx.globalAlpha = 1 - k; ctx.fillStyle = g.col; ctx.beginPath(); ctx.arc(g.x, g.y - (reduced ? 0 : 10 * k), r, 0, 6.2832); ctx.fill(); ctx.globalAlpha = 1; }
   // Opportunities strip
-  ctx.fillStyle = muted; ctx.font = '600 10px ui-sans-serif, system-ui'; ctx.globalAlpha = 0.8; ctx.fillText('OPPORTUNITIES', 4, gh + 11); ctx.globalAlpha = 1;
-  const total = s.stats.cuts + (s.flags.attr || 0); const shown = Math.min(total, Math.floor((w - 110) / 5));
+  ctx.fillStyle = muted; ctx.font = '600 10px ui-sans-serif, system-ui'; ctx.globalAlpha = 0.8; ctx.fillText(a3 ? 'RE-ENGAGED' : 'OPPORTUNITIES', 4, gh + 11); ctx.globalAlpha = 1;
+  const total = a3 ? s.reh : s.stats.cuts + (s.flags.attr || 0); const shown = Math.min(total, Math.floor((w - 110) / 5));
   ctx.globalAlpha = 0.35; for (let i = 0; i < shown; i++) { ctx.fillStyle = DEPTS[Math.floor(hash01(s.seed, i + 77) * 9)].color; ctx.fillRect(100 + i * 5, gh + 5 + (i % 3), 3, 3 + (i % 2)); } ctx.globalAlpha = 1;
   if (total) { ctx.fillStyle = muted; ctx.font = '10px ui-monospace, monospace'; ctx.fillText(String(total), 4, gh + 23); }
 }
@@ -89,7 +100,7 @@ export function drawJaws(ctx: CanvasRenderingContext2D, w: number, h: number, s:
   ctx.strokeStyle = ink; ctx.beginPath(); hs.forEach((p, i) => { const x = X(p[0]), y = Yh(p[2]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.stroke();
   // annotations
   ctx.font = '10px ui-sans-serif, system-ui'; ctx.fillStyle = muted; ctx.strokeStyle = muted; ctx.lineWidth = 1;
-  const marks: [number, string][] = []; if (s.actT[0]) marks.push([s.actT[0], 'Synergy']); if (s.flags.corrAt) marks.push([s.flags.corrAt, 'Correction']); if (s.actT[1]) marks.push([s.actT[1], 'Closed Loop']); if (s.flags.lcAt) marks.push([s.flags.lcAt, 'Last Customer']);
+  const marks: [number, string][] = []; if (s.actT[0]) marks.push([s.actT[0], 'Synergy']); if (s.flags.corrAt) marks.push([s.flags.corrAt, 'Correction']); if (s.actT[1]) marks.push([s.actT[1], 'The Stall']); if (s.flags.finAt) marks.push([s.flags.finAt, 'Head of Efficiency']);
   marks.forEach(([t, label], i) => { const x = X(t); if (x < pad.l || x > w - pad.r) return; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, h - pad.b); ctx.stroke(); ctx.globalAlpha = 1; ctx.fillText(label, Math.min(x + 3, w - 62), h - 3 - (i % 2) * 0); });
 }
 
@@ -130,36 +141,4 @@ export function drawTreemap(ctx: CanvasRenderingContext2D, W: number, H: number,
       let lab = two ? `${hm} ppl / ${fmt(r.t.size)} roles${pc}` : fmt(r.t.size) + pc; if (ctx.measureText(lab).width > w - 8 && two) lab = `${hm} / ${fmt(r.t.size)}${pc}`; if (ctx.measureText(lab).width > w - 8) lab = `${hm || fmt(r.t.size)}`; ctx.fillText(lab, x + 5, y + 27); } ctx.globalAlpha = 1; }
   }
   ctx.fillStyle = muted; void now; void accent;
-}
-
-// ---------- Market field ----------
-export const FIELD = 100;
-const rankCache = new Map<number, { rank: Float32Array; grey: Float32Array; last: number }>();
-function smooth(t: number) { return t * t * (3 - 2 * t); }
-function noise(seed: number, x: number, y: number, scale: number, salt: number) {
-  const gx = x / scale, gy = y / scale; const x0 = Math.floor(gx), y0 = Math.floor(gy); const fx = smooth(gx - x0), fy = smooth(gy - y0);
-  const h = (a: number, b: number) => hash01(seed + salt, a * 131 + b * 7919 + 17);
-  const top = h(x0, y0) * (1 - fx) + h(x0 + 1, y0) * fx, bot = h(x0, y0 + 1) * (1 - fx) + h(x0 + 1, y0 + 1) * fx; return top * (1 - fy) + bot * fy;
-}
-function fieldRanks(seed: number) {
-  let c = rankCache.get(seed); if (c) return c;
-  const n = FIELD * FIELD; const v = new Float32Array(n), g = new Float32Array(n);
-  for (let i = 0; i < n; i++) { const x = i % FIELD, y = Math.floor(i / FIELD); v[i] = 0.62 * noise(seed, x, y, 16, 11) + 0.3 * noise(seed, x, y, 6, 12) + 0.08 * hash01(seed, i + 3); g[i] = 0.5 * noise(seed, x, y, 10, 21) + 0.5 * hash01(seed, i + 91); }
-  const order = Array.from({ length: n }, (_, i) => i).sort((a, b) => v[a] - v[b]); const rank = new Float32Array(n); order.forEach((idx, k) => { rank[idx] = k / n; });
-  const go = Array.from({ length: n }, (_, i) => i).sort((a, b) => g[a] - g[b]); const grey = new Float32Array(n); go.forEach((idx, k) => { grey[idx] = k / n; });
-  let last = 0, best = 9; for (let i = 0; i < n; i++) { const d = Math.abs(rank[i] - 0.8); if (d < best) { best = d; last = i; } }
-  c = { rank, grey, last }; rankCache.set(seed, c); return c;
-}
-export function drawField(c: HTMLCanvasElement, s: State, synth: number, grey: number, now: number) {
-  const ctx = c.getContext('2d')!; const img = ctx.createImageData(FIELD, FIELD); const fr = fieldRanks(s.seed);
-  const flash = s.lastCust === 1 && Math.floor(now / 250) % 2 === 0;
-  for (let i = 0; i < FIELD * FIELD; i++) {
-    const cx = i % FIELD, cy = Math.floor(i / FIELD); let col: number[]; const isLast = i === fr.last;
-    if (fr.rank[i] < synth && !(isLast && flash)) { col = (cx + cy) % 4 === 0 ? [168, 202, 255] : [64, 118, 235]; }
-    else if (fr.grey[i] < grey) col = (cx * 3 + cy) % 7 === 0 ? [96, 94, 90] : [66, 64, 61];
-    else col = (cx * 7 + cy * 3) % 5 === 0 ? [176, 128, 70] : [236, 190, 128];
-    if (isLast && s.lastCust === 1 && flash) col = [255, 244, 160];
-    img.data[i * 4] = col[0]; img.data[i * 4 + 1] = col[1]; img.data[i * 4 + 2] = col[2]; img.data[i * 4 + 3] = 255;
-  }
-  ctx.putImageData(img, 0, 0);
 }

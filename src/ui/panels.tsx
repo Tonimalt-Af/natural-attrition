@@ -1,14 +1,14 @@
 import type { JSX } from 'preact';
 import { useState } from 'preact/hooks';
-import { A1, INITS, QUARTER, RACKS, STATEMENT, TIERS, GUIDANCE, A4 } from '../engine/data.ts';
+import { A1, A3, INITS, QUARTER, STATEMENT, TIERS, GUIDANCE, A4 } from '../engine/data.ts';
 import * as S from '../engine/sim.ts';
 import { clock, eta, int, money, num, pct, usd } from '../engine/format.ts';
 import { t, initName, initBlurb, logText, mailText, deptName, deptShort } from '../i18n/index.ts';
 import { DEPTS } from '../engine/data.ts';
 import { nameOf, roleOf } from '../engine/names.ts';
-import { F_ALIVE, F_BADGE, F_CONTR, F_KEEPER } from '../engine/state.ts';
+import { F_ALIVE, F_BADGE, F_CONTR, F_KEEPER, F_TWICE } from '../engine/state.ts';
 import { G, act, doExport, doImport, notify, resetGame, saveNow, setOpt, useGame } from './store.ts';
-import { Triangle } from './stage.tsx';
+import { GoalCard, exitLine } from './stage.tsx';
 
 const Bar = ({ v, max = 1, cls = '', label }: { v: number; max?: number; cls?: string; label?: string }) => (
   <div class={'bar ' + cls} role="progressbar" aria-valuenow={Math.round((v / max) * 100)} aria-valuemin={0} aria-valuemax={100} aria-label={label}><i style={{ width: `${Math.max(0, Math.min(100, (v / max) * 100))}%` }} /></div>
@@ -29,6 +29,15 @@ export function Vitals() {
           <div class="vital col"><span>{t('hero.morale')} <b>{pct(s.M)}</b></span><Bar v={s.M} cls={s.M < 0.6 ? 'warn' : ''} label={t('hero.morale')} /></div>
           <div class="vital col"><span>{t('hero.exposure')} <b>{Math.round(s.X)}</b>/100</span><Bar v={s.X} max={100} cls={s.X > 70 ? 'warn' : ''} label={t('hero.exposure')} /></div>
         </>
+      ) : s.act === 3 ? (
+        <>
+          <div class="vital col"><span>{t('a3.demand')} <b>{pct(d.dm)}</b></span><Bar v={d.dm} label={t('a3.demand')} /></div>
+          <div class="vital col"><span>{t('a3.board')} <b>{pct(s.conf)}</b></span><Bar v={s.conf} cls={s.conf < A3.INTERV_AT + 0.1 ? 'warn' : ''} label={t('a3.board')} /></div>
+          <div class="vital"><span>{t('a3.reh')}</span><b>{s.reh}</b></div>
+          <div class="vital"><span>{t('a3.billv')}</span><b>{money(d.pay3)}{t('hero.s')}</b></div>
+          <div class="vital"><span>{t('cap.debt')}</span><b>{money(s.debt)}</b></div>
+          <div class="vital col"><span>{t('hero.scandal')} <b>{Math.round(s.S)}</b>/100</span><Bar v={s.S} max={100} cls={s.S > 60 ? 'warn' : ''} label={t('hero.scandal')} /></div>
+        </>
       ) : (
         <>
           <div class="vital" title={t('hq.note')}><span>Roles <i class="muted small">(org chart)</i></span><b>{int(d.E)}</b></div>
@@ -41,7 +50,7 @@ export function Vitals() {
   );
   return (
     <aside class="vitals card" aria-label="Vitals">
-      <div class="vital big"><span>{t('hero.head')} <i class="down" aria-hidden="true">↘</i></span><b data-hero>{s.act === 1 ? int(d.humans) : int(d.humans)}</b></div>
+      <div class="vital big"><span>{t('hero.head')} <i class={s.act === 3 && s.reh > 0 ? 'up' : 'down'} aria-hidden="true">{s.act === 3 && s.reh > 0 ? '↗' : '↘'}</i></span><b data-hero>{s.act === 1 ? int(d.humans) : int(d.humans)}</b></div>
       {saas ? (
         <div class="insights">
           <div class="muted small">{t('insight.h')}</div>
@@ -159,11 +168,10 @@ export function Initiatives() {
     gens.push(<div class="init gen" key="assoc"><div class="init-h"><b>{t('init.assoc')}</b><span class="count">{s.assoc <= cap ? `${s.assoc}/${cap}` : s.assoc}</span></div><div class="muted small">{t('init.assoc.d')} {t('assoc.eff', { s: A1.ASSOC_SLIDES, u: A1.ASSOC_UPKEEP })}</div>{full ? <div class="muted small">{t('assoc.cap')}</div> : surplusS ? <div class="muted small">{t('assoc.surplus', { n: num(s.slides) })}</div> : null}<div class="init-f"><span class="cost">{money(S.assocCost(s))}</span><button class="btn" disabled={full || s.cash < S.assocCost(s)} onClick={() => act((st) => S.buyGen(st, 'assoc'))}>{t('init.buy')}</button></div></div>); }
   { const di = S.deckInfo(s, d); if (di.unlocked && s.act <= 3) gens.push(<div class="init gen" key="deck"><div class="init-h"><b>{t('deck.h')}</b></div><div class="muted small">{t('deck.d')}</div><div class="init-f"><span class="cost">{di.surplus >= 100 ? <>{t('deck.sur', { n: num(di.surplus) })} · <b>{t('deck.get', { c: money(di.gain) })}</b></> : t('deck.none')}</span><button class="btn" disabled={!di.ok} onClick={() => act((st) => { S.presentDeck(st); })}>{di.cd > 0 ? t('deck.cd', { s: Math.ceil(di.cd) }) : t('deck.btn')}</button></div></div>); }
   if (s.own.partners) gens.push(<div class="init gen" key="partner"><div class="init-h"><b>{t('init.partner')}</b><span class="count">{s.partners}</span></div><div class="muted small">{t('init.partner.d')}</div><div class="init-f"><span class="cost">{money(S.partnerCost(s))}</span><button class="btn" disabled={s.cash < S.partnerCost(s)} onClick={() => act((st) => S.buyGen(st, 'partner'))}>{t('init.buy')}</button></div></div>);
-  if (s.act >= 2) TIERS.forEach((tr, i) => { if (i > 0 && s.rc[i - 1] < tr.unlockPrev && !s.rc[i]) return; gens.push(<div class="init gen" key={'rc' + i}><div class="init-h"><b>{t('init.rc' + i)}</b><span class="count">{s.rc[i]}</span></div><div class="muted small">{t('init.rc.d')} +{num(tr.yield)}/s each.</div><div class="init-f"><span class="cost">{money(S.tierCost(s, i))}</span><button class="btn" disabled={s.cash < S.tierCost(s, i)} onClick={() => act((st) => S.buyGen(st, 'rc', i))}>{t('init.buy')}</button></div></div>); });
-  if (s.act >= 3) RACKS.forEach((rk, i) => { if ((i === 0 && !s.own.synth1) || (i === 1 && !s.own.synth2)) return; gens.push(<div class="init gen" key={'rk' + i}><div class="init-h"><b>{t('init.rk' + i)}</b><span class="count">{s.racks[i]}</span></div><div class="muted small">{t('init.rk.d')}</div><div class="init-f"><span class="cost">{money(S.rackCost(s, i))}</span><button class="btn" disabled={s.cash < S.rackCost(s, i)} onClick={() => act((st) => S.buyGen(st, 'rack', i))}>{t('init.buy')}</button></div></div>); });
+  if (s.act === 2) TIERS.forEach((tr, i) => { if (i > 0 && s.rc[i - 1] < tr.unlockPrev && !s.rc[i]) return; gens.push(<div class="init gen" key={'rc' + i}><div class="init-h"><b>{t('init.rc' + i)}</b><span class="count">{s.rc[i]}</span></div><div class="muted small">{t('init.rc.d')} +{num(tr.yield)}/s each.</div><div class="init-f"><span class="cost">{money(S.tierCost(s, i))}</span><button class="btn" disabled={s.cash < S.tierCost(s, i)} onClick={() => act((st) => S.buyGen(st, 'rc', i))}>{t('init.buy')}</button></div></div>); });
   return (
     <div class="inits">
-      <div class="goal card"><span class="muted small">{t('init.next')}</span>{goal ? <><b>{initName(goal.id)}</b>{goal.orc ? <span class="small">{t('bid.orc.goal')}</span> : null}<span class="small">{goal.blocker === 'ready' ? t('goal.ready') : t('goal.' + goal.blocker, { n: goal.blocker === 'cash' ? money(goal.need) : num(goal.need), have: goal.blocker === 'cash' ? money(goal.have) : num(goal.have), eta: eta(goal.eta) })}</span></> : <span class="muted">{t('init.wait')}</span>}</div>
+      {s.act === 3 ? <GoalCard /> : <div class="goal card"><span class="muted small">{t('init.next')}</span>{goal ? <><b>{initName(goal.id)}</b><span class="small">{goal.blocker === 'ready' ? t('goal.ready') : t('goal.' + goal.blocker, { n: goal.blocker === 'cash' ? money(goal.need) : num(goal.need), have: goal.blocker === 'cash' ? money(goal.have) : num(goal.have), eta: eta(goal.eta) })}</span></> : <span class="muted">{t('init.wait')}</span>}</div>}
       {gens}
       {list.map((i) => <Card key={i.id} id={i.id} />)}
       {owned.length ? <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}><summary>{t('init.owned')} ({owned.length})</summary><ul class="ownedlist">{owned.map((i) => <li key={i.id}>{initName(i.id)}</li>)}</ul></details> : null}
@@ -221,8 +229,8 @@ export function Capital() {
         <div class="muted small">Lenders read the reported number.</div>
         <div class="btnrow"><button class="btn sm" onClick={() => act((st) => S.repay(st))} disabled={s.debt <= 0 || s.cash <= 0}>{t('cap.repay')}</button>
           <div class="seg" role="radiogroup" aria-label={t('cap.fund')}><button role="radio" aria-checked={!s.flags.debtFirst} class={!s.flags.debtFirst ? 'on' : ''} onClick={() => act((st) => { st.flags.debtFirst = 0; })}>{t('cap.fund.cash')}</button><button role="radio" aria-checked={!!s.flags.debtFirst} class={s.flags.debtFirst ? 'on' : ''} onClick={() => act((st) => { st.flags.debtFirst = 1; })}>{t('cap.fund.debt')}</button></div></div>
-        <label class="slider"><span>{t('cap.int')}: <b>{s.intensity.toFixed(1)}×</b></span><input type="range" min={0.5} max={2} step={0.1} value={s.intensity} onInput={(e) => act((st) => S.setIntensity(st, Number((e.target as HTMLInputElement).value)))} /></label>
-        <div class="muted small">{t('cap.int.d')}</div>
+        {s.act === 2 ? <label class="slider"><span>{t('cap.int')}: <b>{s.intensity.toFixed(1)}×</b></span><input type="range" min={0.5} max={2} step={0.1} value={s.intensity} onInput={(e) => act((st) => S.setIntensity(st, Number((e.target as HTMLInputElement).value)))} /></label> : null}
+        {s.act === 2 ? <div class="muted small">{t('cap.int.d')}</div> : null}
         {S.abMax(s) > 0 ? <><label class="slider"><span>{t('cap.addback')}: <b>{s.addback}</b> / {S.abMax(s)}</span><input type="range" min={0} max={S.abMax(s)} step={1} value={s.addback} onInput={(e) => act((st) => S.setAddback(st, Number((e.target as HTMLInputElement).value)))} /></label><div class="muted small">{t('cap.addback.d')}</div></> : null}
         <div class="kv"><span>Blocked by scandal?</span><b>{Math.round(s.S)}/100</b></div>
         {s.own.aiwash ? <button class="btn sm" disabled={s.t - s.washAt < 60} onClick={() => act((st) => S.aiwash(st))}>{t('cap.aiwash')}{s.t - s.washAt < 60 ? ` (${Math.ceil(60 - (s.t - s.washAt))} s)` : ''}</button> : null}
@@ -245,36 +253,69 @@ export function Capital() {
           <div class="muted small sr-only">{moodNames[mood]}</div>
         </section>
       ) : null}
-      {s.act >= 3 ? (
-        <section class="card"><h3>{t('cap.mixes')}</h3><Triangle />
-          <div class="kv"><span>{t('cap.closure')}</span><b>{pct(d.lambdaC)}</b></div><Bar v={d.lambdaC} cls="blue" label={t('cap.closure')} />
-          <div class="kv"><span>{t('cap.demand')}</span><b>{pct(Math.max(0, d.dm))}</b></div><Bar v={Math.max(0, d.dm)} label={t('cap.demand')} />
-          <div class="kv"><span>{t('cap.hd')}</span><b>{pct(d.hdRatio)}</b></div><Bar v={d.hdRatio} max={1} cls={d.hdRatio > 0.7 ? 'warn' : ''} label={t('cap.hd')} />
-          {s.own.secur ? <button class="btn sm" disabled={s.HD <= 0} onClick={() => act((st) => S.securitize(st))}>{t('cap.secur')}</button> : null}
-        </section>
-      ) : null}
     </div>
   );
 }
 
 // ---------- Targets (Act II/III) ----------
 export function Targets() {
-  const g = useGame(); const s = g.s; const d = g.d; if (s.act < 2 || s.act > 3) return null;
+  const g = useGame(); const s = g.s; const d = g.d; if (s.act !== 2) return null;
   const why = s.targets.map((tg) => S.canBid(s, d, tg));
-  const allOrc = s.targets.length > 0 && why.every((w) => w === 'orc'), allCap = s.targets.length > 0 && why.every((w) => w === 'cap'), allCash = s.targets.length > 0 && why.every((w) => w === 'cash');
-  const rc = INITS.find((i) => i.id === 'regcap')!; const rcc = S.costOf(s, rc);
-  const rcEta = Math.max(rcc.slides > s.slides ? (rcc.slides - s.slides) / Math.max(d.slidesRate, 1e-6) : 0, rcc.cash > s.cash ? (rcc.cash - s.cash) / Math.max(d.pi, 1e-6) : 0);
-  const orcAny = why.some((w) => w === 'orc');
+  const allCap = s.targets.length > 0 && why.every((w) => w === 'cap'), allCash = s.targets.length > 0 && why.every((w) => w === 'cash');
   return (
     <section class="card targets" aria-label={t('targets.h')}>
       <h3>{t('targets.h')}</h3>
-      {s.act === 3 && !s.own.regcap && orcAny && (allOrc || why.every((w) => w === 'orc' || w === 'cap')) ? <div class="banner orc" role="status"><span>{t('bid.banner.orc')}</span> <b>{t('bid.banner.orc2')}</b> <span class="muted small">{rcc.slides > s.slides ? `${num(rcc.slides)} Slides (${num(s.slides)} so far)` : `${num(rcc.slides)} Slides ✓`}{rcc.cash > 0 ? ` · ${money(rcc.cash)}` : ''} · {rcEta < 1 ? t('goal.ready') : `${t('init.afford')} ${eta(rcEta)}`}{S.visible(s, rc) ? '' : ' · appears at 40% consolidation'}</span></div> : allCap ? <div class="banner" role="status">{t('bid.banner.cap')}</div> : allCash ? <div class="banner" role="status">{t('bid.banner.cash')}</div> : null}
+      {allCap ? <div class="banner" role="status">{t('bid.banner.cap')}</div> : allCash ? <div class="banner" role="status">{t('bid.banner.cash')}</div> : null}
       <div class="tablewrap"><table class="data"><thead><tr><th>Company</th><th class="r">{t('targets.size')}</th><th class="r">{t('targets.cost')}</th><th /></tr></thead><tbody>
         {s.targets.map((tg, i) => { const cost = S.bidCost(s, d, tg.size); const w = why[i];
           return <tr key={tg.id}><td>{tg.name}<div class="muted small">{t('culture.' + ['family', 'union', 'vc', 'founder'][tg.cult])}</div></td><td class="r">{int(tg.size)}</td><td class="r">{money(cost)}</td><td><button class="btn sm" disabled={!!w} title={w ? t('bid.' + w, { n: money(Math.max(0, cost - s.cash)) }) : ''} onClick={() => act((st) => S.bid(st, tg.id))}>{w ? t('bid.' + w, { n: money(Math.max(0, cost - s.cash)) }) : t('targets.bid')}</button></td></tr>; })}
       </tbody></table></div>
       <div class="muted small">Price per employee {money(d.price * d.stockF)} · stock-funded share {pct(1 - d.stockF)} cheaper at a high multiple.</div>
     </section>
+  );
+}
+
+// ---------- Act III: the Re-engagement Desk ----------
+function HeadCard() {
+  const g = useGame(); const s = g.s; const d = g.d; const i = s.first; if (i < 0) return null;
+  const st = S.finaleState(s); const name = nameOf(s.seed, i); const cost = S.finaleCost(s);
+  return (
+    <section class={'card hoe' + (st === '' ? ' ready' : '')} aria-label={t('a3.hoe.h')}>
+      <h3>{t('a3.hoe.h')}</h3>
+      <p class="memo small"><b>{name}</b>, {roleOf(s.seed, i, s.dept[i])}. {exitLine(s, i)} {st === 'done' ? t('a3.hoe.done') : st === '' ? t('a3.hoe.ready') : t('a3.hoe.wait', { n: Math.round(A3.DM_FIN * 100) })}</p>
+      <Bar v={s.flags.stall ? d.dm : 0} max={A3.DM_FIN} cls={st === '' ? 'blue' : ''} label={t('a3.demand')} />
+      <button class="btn primary" disabled={st !== ''} onClick={() => act((x) => S.offerHead(x))}>{st === '' ? t('a3.hoe.go', { c: money(cost) }) : st === 'cash' ? t('a3.hoe.cash', { c: money(cost) }) : st === 'done' ? t('a3.hoe.started') : t('a3.hoe.locked', { n: Math.round(A3.DM_FIN * 100) })}</button>
+    </section>
+  );
+}
+export function Desk() {
+  const g = useGame(); const s = g.s; const d = g.d;
+  const [dept, setDept] = useState(-1); const [sort, setSort] = useState<'value' | 'demand' | 'cost' | 'board' | 'wave'>('value'); const [q, setQ] = useState(''); const [msg, setMsg] = useState('');
+  if (s.act !== 3) return null;
+  let rows = S.pool3(s).filter((i) => dept < 0 || s.dept[i] === dept).map((i) => ({ o: S.offer(s, i), name: nameOf(s.seed, i) }));
+  if (q) rows = rows.filter((r) => r.name.toLowerCase().includes(q.toLowerCase()));
+  rows.sort((a, b) => (sort === 'value' ? b.o.value - a.o.value : sort === 'demand' ? b.o.eff - a.o.eff : sort === 'cost' ? a.o.ret - b.o.ret : sort === 'board' ? a.o.pen - b.o.pen : s.cutT[a.o.i] - s.cutT[b.o.i]));
+  const total = rows.length; rows = rows.slice(0, 12);
+  const batch = (n: number) => { const r = act((st) => S.reengageBest(st, n)); setMsg(r.why === 'locked' ? t('a3.batch.locked') : r.done ? t('a3.batch.done', { n: r.done }) + (r.why === 'board' ? ' ' + t('a3.batch.board') : r.why === 'cash' ? ' ' + t('a3.batch.cash') : '') : r.why === 'board' ? t('a3.batch.board0') : r.why === 'cash' ? t('a3.batch.cash0') : t('a3.batch.none')); };
+  return (
+    <>
+      <HeadCard />
+      <section class="dir card desk" aria-label={t('a3.desk.h')}>
+        <div class="dir-h"><h3>{t('a3.desk.h')}</h3><span class="muted small">{t('a3.desk.d', { n: total })}</span></div>
+        <div class="filters"><input type="search" placeholder={t('dir.search')} aria-label={t('dir.search')} value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} />
+          <label>{t('dir.dept')} <select value={dept} onChange={(e) => setDept(Number((e.target as HTMLSelectElement).value))}><option value={-1}>{t('wave.all')}</option>{DEPTS.map((_, i) => <option key={i} value={i}>{deptName(i)}</option>)}</select></label>
+          <label>{t('dir.sort')} <select value={sort} onChange={(e) => setSort((e.target as HTMLSelectElement).value as 'value')}><option value="value">{t('a3.sort.value')}</option><option value="demand">{t('a3.demand')}</option><option value="cost">{t('a3.ret')}</option><option value="board">{t('a3.board')}</option><option value="wave">{t('a3.sort.wave')}</option></select></label></div>
+        <div class="btnrow batch"><b class="small">{t('a3.batch.h')}</b>{[5, 10, 25].map((n) => <button key={n} class="btn sm" disabled={!s.own.alumni} onClick={() => batch(n)}>{t('a3.batch.n', { n })}</button>)}{!s.own.alumni ? <span class="muted small">{t('a3.batch.locked')}</span> : null}</div>
+        {msg ? <div class="small" role="status">{msg}</div> : null}
+        <div class="deskrows" role="list">{rows.map(({ o, name }) => { const gain = S.dmGain(s, o.eff, d); const why = S.canReengage(s, o.i); const f = s.fl[o.i]; return (
+          <div role="listitem" key={o.i} class={'deskrow' + (G.sel === o.i ? ' sel' : '')} onClick={() => { G.sel = o.i; notify(); }}>
+            <div class="dr-who"><b>{name}</b><span class="muted small">{roleOf(s.seed, o.i, s.dept[o.i])} · <span style={{ color: DEPTS[s.dept[o.i]].color }}>{DEPTS[s.dept[o.i]].glyph}</span> {deptShort(s.dept[o.i])}{f & F_TWICE ? ' · ' + t('a3.chip.twice') : s.cutW[o.i] === 0 ? ' · ' + t('a3.chip.left') : ''}</span></div>
+            <div class="dr-fx"><span class="good" title={t('a3.demand')}>+{(gain * 100).toFixed(1)}</span><span class={s.conf - o.pen < A3.INTERV_AT ? 'bad' : 'muted'} title={t('a3.board')}>−{(o.pen * 100).toFixed(0)}</span><span class="mono">{money(o.ret)}</span></div>
+            <button class="btn sm" disabled={!!why} aria-label={`${t('a3.reeng')} ${name}`} onClick={(e) => { e.stopPropagation(); act((st) => S.reengage(st, o.i)); }}>{why === 'cash' ? t('a3.cash') : t('a3.reeng')}</button>
+          </div>); })}</div>
+        <div class="muted small">{t('a3.desk.legend')}</div>
+      </section>
+    </>
   );
 }
 
@@ -304,7 +345,7 @@ export function Settings() {
   );
 }
 
-const JUMPS = ['act1-mid', 'act1-end', 'act2-start', 'act2-mid', 'act3-start', 'act3-mid', 'act4'];
+const JUMPS = ['act1-mid', 'act1-end', 'act2-start', 'act2-mid', 'act3-start', 'act3-stall', 'act3-mid', 'act3-late', 'act3-finale', 'act4'];
 export function Debug() {
   const g = useGame(); const s = g.s; if (!g.debug) return null;
   return (
@@ -313,7 +354,7 @@ export function Debug() {
       <div class="seg">{[1, 4, 16, 64, 256].map((x) => <button key={x} class={g.speed === x ? 'on' : ''} onClick={() => { g.speed = x; notify(); }}>×{x}</button>)}<button class={g.paused ? 'on' : ''} onClick={() => { g.paused = !g.paused; notify(); }}>{t('debug.pause')}</button></div>
       <div class="btnrow"><button class="btn sm" onClick={() => act((st) => { st.cash += 1e5; st.slides += 1000; })}>+cash +slides</button><button class="btn sm" onClick={() => act((st) => { st.cash *= 100; st.slides *= 100; })}>×100</button><button class="btn sm" onClick={() => act((st) => { st.M = 0.9; st.X = 0; })}>morale</button>
         <select aria-label={t('debug.jump')} onChange={async (e) => { const v = (e.target as HTMLSelectElement).value; if (!v) return; const r = await fetch(`./fixtures/${v}.nasave`); if (r.ok) { await doImport(await r.text()); g.meta.debugUsed = true; } }}><option value="">{t('debug.jump')}…</option>{JUMPS.map((j) => <option key={j}>{j}</option>)}</select></div>
-      <div class="muted small mono">t={s.t.toFixed(0)} act={s.act} E={num(g.d.E)} π={num(g.d.pi)} φ={g.d.phi.toFixed(3)} λc={g.d.lambdaC.toFixed(2)} dm={g.d.dm.toFixed(2)} hz: F={g.d.phiF.toFixed(2)}</div>
+      <div class="muted small mono">t={s.t.toFixed(0)} act={s.act} E={num(g.d.E)} π={num(g.d.pi)} φ={g.d.phi.toFixed(3)} dm={g.d.dm.toFixed(2)} conf={s.conf.toFixed(2)} reh={s.reh} hz: F={g.d.phiF.toFixed(2)}</div>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 // idle resource surpluses, and purchases that barely move the bottleneck. Usage: node tools/deadtime.ts [modes] [seeds] [--md]
 import { run, type Mode } from './bot.ts';
 import * as S from '../src/engine/sim.ts';
-import { INITS, A1, A2, TIERS, RACKS } from '../src/engine/data.ts';
+import { INITS, A1, A3, TIERS } from '../src/engine/data.ts';
 import type { State } from '../src/engine/state.ts';
 import { writeFileSync, mkdirSync } from 'node:fs';
 
@@ -11,6 +11,14 @@ export interface Report { mode: Mode; seed: number; endMin: number; gaps: Gap[];
 
 function hasOptions(s: State, d: S.Derived, g: S.Goal | null): boolean {
   if (s.act === 4) return true; // scripted; not a purchase economy
+  if (s.act === 3) {
+    // Honest Act III options: the finale, an Act III initiative, or a rehire that is affordable AND keeps the Board above its intervention line. Waiting on confidence alone is not an option.
+    if (S.finaleState(s) === '') return true;
+    if (s.flags.finAt) return true;
+    for (const id of ['alumni', 'flex', 'store', 'ir']) if (S.canBuy(s, id) === '') return true;
+    for (const i of S.pool3(s)) { const o = S.offer(s, i); if (s.cash >= o.ret && s.conf - o.pen >= A3.INTERV_AT + 0.03) return true; }
+    return false;
+  }
   if (g && g.blocker === 'ready') return true;
   if (s.act === 1) {
     if (g && g.blocker === 'h' && s.cash > 100) return true; // cutting down to the Memo's headcount is an action
@@ -20,7 +28,6 @@ function hasOptions(s: State, d: S.Derived, g: S.Goal | null): boolean {
     const room = Math.max(0, d.debtCap * 0.75 - s.debt);
     for (const tg of s.targets) { const c = S.bidCost(s, d, tg.size); if (S.canBid(s, d, tg) === '' && (c <= s.cash || (c <= room && s.flags.debtFirst))) return true; }
     if (s.U > 0) for (let i = 0; i < TIERS.length; i++) { if (i > 0 && s.rc[i - 1] < TIERS[i].unlockPrev) continue; if (S.tierCost(s, i) <= s.cash && d.rcEff > 0 && TIERS[i].yield / Math.max(d.rcEff, 1) >= 0.05) return true; }
-    if (s.act >= 3) for (let i = 0; i < RACKS.length; i++) { if ((i === 0 && !s.own.synth1) || (i === 1 && !s.own.synth2)) continue; if (S.rackCost(s, i) <= s.cash) return true; }
   }
   if (g && s.own.consult && g.blocker === 'slides') { const c = S.assocCost(s); if (s.cash >= c && A1.ASSOC_SLIDES / Math.max(d.slidesRate, 1e-6) >= 0.05) return true; }
   return false;

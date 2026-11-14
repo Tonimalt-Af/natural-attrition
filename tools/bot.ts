@@ -1,6 +1,6 @@
 import { initState, type State } from '../src/engine/state.ts';
 import * as S from '../src/engine/sim.ts';
-import { INITS, TICK, TIERS, RACKS, DAYS_PER_YEAR, A2 } from '../src/engine/data.ts';
+import { INITS, TICK, TIERS, A2, A3 } from '../src/engine/data.ts';
 
 export type Mode = 'greedy' | 'lazy' | 'idle' | 'aggressive' | 'clicky';
 const HUMANLIKE = (m: Mode) => m === 'aggressive' || m === 'clicky';
@@ -58,7 +58,7 @@ export function run(opts: { seed?: number; mode?: Mode; maxMin?: number; stopAct
   const seenOwn = new Set<string>(); let lastAct = 1;
   while (s.t < maxT && !s.ended) {
     S.step(s, TICK); acc += TICK; opts.hook?.(s);
-    if (opts.trace && Math.abs(s.t / (opts.trace * 60) - Math.round(s.t / (opts.trace * 60))) < TICK / (opts.trace * 60) / 2) { const d = S.derive(s); const f = (x: number) => x.toExponential(2); console.log(`t=${(s.t / 60).toFixed(0)}m a${s.act} E=${f(d.E)} U=${f(s.U)} H=${f(d.humans)} cash=${f(s.cash)} debt=${f(s.debt)} pi=${f(d.pi)} piRep=${f(d.piRep)} mc=${f(d.mcRep)} m=${d.mTot.toFixed(1)} S=${s.S.toFixed(0)} F=${d.phiF.toFixed(2)} ab=${s.addback} ai=${d.ai} rc=${s.rc.join('/')} lam=${d.lambdaC.toFixed(2)} sl=${f(s.slides)}`); }
+    if (opts.trace && Math.abs(s.t / (opts.trace * 60) - Math.round(s.t / (opts.trace * 60))) < TICK / (opts.trace * 60) / 2) { const d = S.derive(s); const f = (x: number) => x.toExponential(2); console.log(`t=${(s.t / 60).toFixed(0)}m a${s.act} E=${f(d.E)} U=${f(s.U)} H=${f(d.humans)} cash=${f(s.cash)} debt=${f(s.debt)} pi=${f(d.pi)} piRep=${f(d.piRep)} mc=${f(d.mcRep)} m=${d.mTot.toFixed(1)} S=${s.S.toFixed(0)} F=${d.phiF.toFixed(2)} ab=${s.addback} ai=${d.ai} rc=${s.rc.join('/')} dm=${s.dm.toFixed(2)} conf=${s.conf.toFixed(2)} reh=${s.reh} sl=${f(s.slides)}`); }
     if (acc >= every) { acc = 0; policy(s, mode); }
     for (const id in s.own) if (!seenOwn.has(id)) { seenOwn.add(id); marks['own:' + id] = s.t; }
     if (s.act !== lastAct) { lastAct = s.act; marks['act' + s.act] = s.t; if (opts.stopAct && s.act >= opts.stopAct) break; }
@@ -75,17 +75,15 @@ function policy(s: State, mode: Mode) {
   else act4(s, mode);
 }
 const A2_ORDER = ['lev1', 'ai1', 'partners', 'procure', 'ab1', 'statement', 'rainy', 'ai2', 'deck', 'guard1', 'ab2', 'lev2', 'ai3', 'aiwash', 'ai4', 'guard2', 'ab3', 'ai5', 'lev3', 'ai6', 'ab4'];
-const A3_ORDER = ['bnpl', 'synth1', 'atm', 'secur', 'regcap', 'lights', 'synth2', 'engage'];
+const A3_ORDER = ['alumni', 'flex', 'store', 'ir'];
 function act23(s: State, mode: Mode) {
   const d = S.derive(s);
   s.flags.debtFirst = 1;
   // initiatives
   if (s.act === 2) { for (const id of A2_ORDER) { const e = S.canBuy(s, id); if (e === '') S.buy(s, id); else if ((e === 'cash' || e === 'slides') && ['ai1','ai2','ai3','ai4','ai5','ai6','lev1','lev2','ab1','ab2'].includes(id) && id === A2_ORDER.find((x) => !s.own[x] && ['ai1','ai2','ai3','ai4','ai5','ai6','lev1','lev2','ab1','ab2'].includes(x))) break; } }
   else {
-    const req = ['synth1', 'ai5', 'ai6', 'lights', 'synth2', ...(d.phi > 0.4 ? ['regcap'] : [])];
-    let blocked = false;
-    for (const id of req) { if (s.own[id]) continue; const e = S.canBuy(s, id); if (e === '') S.buy(s, id); else { blocked = true; break; } }
-    if (!blocked) for (const id of ['atm', 'bnpl', 'secur', 'engage', 'ab3', 'ab4', 'lev3']) if (!s.own[id] && S.canBuy(s, id) === '') S.buy(s, id);
+    for (const id of A3_ORDER) if (!s.own[id] && S.canBuy(s, id) === '') S.buy(s, id);
+    for (const id of A2_ORDER) if (!s.own[id] && S.canBuy(s, id) === '' && !['lev1', 'lev2', 'lev3'].includes(id)) S.buy(s, id);
   }
   if (HUMANLIKE(mode)) { for (const it of INITS) if (it.act <= s.act && !s.own[it.id] && S.canBuy(s, it.id) === '' && !(it.id === 'aiwash') && !(it.id.startsWith('ab') && s.act < 3 && false)) S.buy(s, it.id); }
   // restructuring capacity
@@ -98,8 +96,6 @@ function act23(s: State, mode: Mode) {
   }
   if (s.own.consult && s.partners < 30 && s.own.partners && s.cash > S.partnerCost(s) * 6) S.buyGen(s, 'partner');
   if (s.own.consult && s.assoc < 40 && s.cash > S.assocCost(s) * 8) S.buyGen(s, 'assoc');
-  // racks
-  if (s.act === 3) for (const i of [1, 0]) { while (S.rackCost(s, i) < s.cash * 0.5 && S.buyGen(s, 'rack', i) === '') {} }
   // add-backs
   const ab = S.abMax(s);
   const want = d.phiF > 0.55 ? Math.max(0, s.addback - 1) : d.phiF < 0.3 ? Math.min(ab, 3) : s.addback;
@@ -110,22 +106,36 @@ function act23(s: State, mode: Mode) {
   S.setIntensity(s, s.S > 60 ? 0.7 : s.S < 20 ? 1.4 : 1);
   S.setGuidance(s, 1);
   // acquisitions
-  if (s.act === 3) { const m = d.lambdaC; S.setMix(s, 0.1, m > 0.5 ? 0.1 : 0.3, m > 0.5 ? 0.8 : 0.6); }
   const ready = s.U < Math.max(0.2 * (s.U + s.I), 200) || d.rcEff * 20 > s.U;
-  if (ready && (s.act === 2 || s.U + s.I < A2.N0 * 0.55 || s.own.regcap)) {
+  if (ready && s.act === 2) {
     const room = Math.max(0, d.debtCap * 0.75 - s.debt);
     let best = -1, bs = 0;
     for (const tg of s.targets) { const c = S.bidCost(s, d, tg.size); if (c <= room && tg.size > bs) { bs = tg.size; best = tg.id; } }
     if (best >= 0) S.bid(s, best);
   }
   if (s.debt > 0 && s.cash > s.debt * 3) S.repay(s);
-  if (s.HD > 0 && S.derive(s).hdRatio > 0.55) S.securitize(s);
-  if (s.act === 3 && s.lastCust === 0) void 0;
+  if (s.act === 3) act3(s, mode);
+}
+/** Act III: pick the best value-for-the-Board people you can afford. Lazy batches, aggressive ignores the Board, the rest keep a confidence floor. */
+function act3(s: State, mode: Mode) {
+  if (S.finaleState(s) === '') { S.offerHead(s); return; }
+  if (s.flags.finAt) return;
+  const floor = mode === 'aggressive' ? 0 : mode === 'clicky' ? 0.47 : 0.5;
+  if (mode === 'lazy' && s.own.alumni) { S.reengageBest(s, 25); return; }
+  const list = S.pool3(s).map((i) => S.offer(s, i)).sort((a, b) => b.value - a.value);
+  let k = 0;
+  for (const o of list) {
+    if (k >= (mode === 'lazy' ? 6 : 40)) break;
+    const cur = S.offer(s, o.i);
+    if (s.cash < cur.ret) break;
+    if (s.conf - cur.pen < floor) break;
+    if (S.reengage(s, o.i) === '') k++;
+  }
 }
 function act4(s: State, mode: Mode) {
   void mode; const st = s.a4;
   if (st.running) return;
-  if (st.step === 4) S.a4Badge(s, 'A');
+  if (st.step === 4) S.a4Badge(s, st.v === 2 ? 'A' : mode === 'lazy' ? 'A' : 'B');
   else if (st.step === 6) S.a4Submit(s, 9);
   else S.a4Run(s);
 }

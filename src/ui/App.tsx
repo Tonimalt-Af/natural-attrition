@@ -4,9 +4,10 @@ import * as S from '../engine/sim.ts';
 import { clock, int, money, num, pct, usd } from '../engine/format.ts';
 import { t, mailText } from '../i18n/index.ts';
 import { G, act, continueGame, notify, saveNow, startNew, useGame } from './store.ts';
-import { Field, Floor, Jaws, Portfolio } from './stage.tsx';
-import { Capital, Debug, Directory, Initiatives, Inbox, LogView, Settings, Ticker, Targets, Vitals, WavePlanner } from './panels.tsx';
-import { LOG, MAIL } from '../i18n/en.ts';
+import { Floor, GoalCard, Jaws, Meters, Portfolio } from './stage.tsx';
+import { Capital, Debug, Desk, Directory, Initiatives, Inbox, LogView, Settings, Ticker, Targets, Vitals, WavePlanner } from './panels.tsx';
+import { LOG } from '../i18n/en.ts';
+import { nameOf, roleOf } from '../engine/names.ts';
 
 function Welcome() {
   const g = useGame(); const [name, setName] = useState('Alex');
@@ -34,7 +35,7 @@ function Hero() {
   return (
     <header class="top">
       <div class="hero"><span class="lab">{t('hero.mc')} <span class="muted">{lens ? t('hero.real') : t('hero.reported')}{daggers ? <sup>†</sup> : null}</span></span><b class="mc" data-hero title={lens ? 'Real' : 'Reported'}>{mc > 1e22 ? '∞' : usd(mc)}</b></div>
-      <div class="mini"><span>{t('hero.head')} <i class="down">↘</i></span><b>{int(d.humans)}</b></div>
+      <div class="mini"><span>{t('hero.head')} <i class={s.act === 3 && s.reh > 0 ? 'up' : 'down'}>{s.act === 3 && s.reh > 0 ? '↗' : '↘'}</i></span><b>{int(d.humans)}</b></div>
       <div class="mini"><span>{t('hero.cash')}</span><b>{money(s.cash)}</b></div>
       <div class="mini hide-s"><span>{t('hero.profit')}</span><b class={d.pi >= 0 ? 'good' : 'bad'}>{money(d.pi)}{t('hero.s')}</b></div>
       <div class="mini"><span>{t('hero.slides')}</span><b>{num(s.slides)}</b></div>
@@ -57,7 +58,7 @@ function Side({ tab }: { tab: string }) {
 
 function Tabs({ mobile }: { mobile: boolean }) {
   const g = useGame(); const s = g.s;
-  const tabs: [string, string][] = [['floor', mobile ? (s.act === 1 ? t('tab.floor') : s.act === 2 ? 'Portfolio' : t('tab.market')) : ''], ['init', t('tab.init')], ['inbox', t('tab.inbox')], ['capital', t('tab.capital')], ['log', t('tab.log')], ['settings', t('tab.settings')]];
+  const tabs: [string, string][] = [['floor', mobile ? (s.act === 1 ? t('tab.floor') : s.act === 2 ? 'Portfolio' : t('tab.reeng')) : ''], ['init', t('tab.init')], ['inbox', t('tab.inbox')], ['capital', t('tab.capital')], ['log', t('tab.log')], ['settings', t('tab.settings')]];
   return (
     <nav class={mobile ? 'tabbar' : 'tabs'} aria-label={mobile ? 'Sections' : 'Panels'}>
       {tabs.filter(([k]) => (mobile || k !== 'floor') && (k !== 'capital' || s.act >= 2) && (!mobile || k !== 'log')).map(([k, label]) => (
@@ -72,9 +73,11 @@ function Stage() {
   return (
     <section class="stage" aria-label="Stage">
       <div class="card stagecard">
-        <h2 class="stage-h">{s.act === 1 ? 'The Floor' : s.act === 2 ? t('portfolio.h') : 'The Market'}</h2>
-        {s.act === 1 ? <Floor /> : s.act === 2 ? <Portfolio /> : <Field />}
+        <h2 class="stage-h">{s.act === 1 ? 'The Floor' : s.act === 2 ? t('portfolio.h') : t('a3.stage')}</h2>
+        {s.act === 3 ? <><GoalCard /><Meters /></> : null}
+        {s.act === 1 || s.act === 3 ? <Floor /> : <Portfolio />}
       </div>
+      {s.act === 3 ? <Desk /> : null}
       <Jaws />
       {s.act === 1 ? <Directory /> : null}
       {s.act === 2 ? <Targets /> : null}
@@ -110,6 +113,25 @@ function Modals() {
 
 // ---------------- Act IV: the UI dismantles itself (T7) ----------------
 const STATUS = ['Reviewing mandate…', 'Cross-referencing responsibilities…', 'Locating the person responsible…', 'Finding that the person responsible is this analysis…', 'Recommending efficiency…', 'Drafting a gracious note…'];
+function Verdict() {
+  const g = useGame(); const s = g.s; const a = s.a4; const rev = nameOf(s.seed, s.first); const { parts } = S.cruelty(s);
+  let big = 0; for (const w of s.waves) if (w >= 10) big += w;
+  const lines: [number, string][] = [[parts.cuts, t('a4.v.cuts', { n: int(s.stats.cuts) })], [parts.waves, t('a4.v.waves', { n: int(big) })], [parts.incidents, t('a4.v.inc', { n: s.stats.incidents })], [parts.lawsuits, t('a4.v.law', { n: s.stats.lawsuits })], [parts.interv, t('a4.v.interv', { n: s.flags.recut ?? 0 })], [parts.scandal, t('a4.v.scandal', { n: Math.round(s.S) })]];
+  const shown = lines.filter((x) => x[0] > 0.004).sort((x, y) => y[0] - x[0]).slice(0, 4);
+  const pick = (ch: 'A' | 'B') => act((st) => S.a4Badge(st, ch));
+  return (
+    <div class="a4act verdict">
+      <p class="memo">{t('a4.v.intro', { rev, role: roleOf(s.seed, s.first, s.dept[s.first]) })}</p>
+      <ul class="memo verdict-l">{shown.length ? shown.map((x, i) => <li key={i}>{x[1]}</li>) : <li>{t('a4.v.none')}</li>}</ul>
+      <p class="memo"><b>{t('a4.v.' + a.v, { rev })}</b></p>
+      <div class="btnrow">
+        {a.v === 0 ? <><button class="btn primary" onClick={() => pick('B')}>{t('a4.v.keep')}</button><button class="btn danger" onClick={() => pick('A')}>{t('a4.v.decline')}</button></> : null}
+        {a.v === 1 ? <><button class="btn danger" onClick={() => pick('A')}>{t('a4.v.accept')}</button><button class="btn primary" onClick={() => pick('B')}>{t('a4.v.appeal')}</button></> : null}
+        {a.v === 2 ? <><button class="btn danger" onClick={() => pick('A')}>{t('a4.v.accept')}</button><button class="btn" disabled>{t('a4.v.denied')}</button></> : null}
+      </div>
+    </div>
+  );
+}
 function Act4() {
   const g = useGame(); const s = g.s; const a = s.a4; const stable = g.opts.stable || g.opts.reduced;
   const step = a.step; const need = step === 5 ? A4.SUNSET : A4.ANALYSIS;
@@ -120,7 +142,7 @@ function Act4() {
   const lastTxt = last ? mailText(s, last) : null;
   const ended = s.ended;
   const [typed, setTyped] = useState(0);
-  const endMail = ended ? MAIL[ended === 'A' ? 'a4_endA' : 'a4_endB'] : null;
+  const endMail = ended ? mailText(s, { id: ended === 'A' ? 'a4_endA' : 'a4_endB', t: s.t, read: true, p: { n: s.first, me: s.name, cuts: s.stats.cuts, inc: s.stats.incidents } }) : null;
   useEffect(() => { if (!ended) return; if (stable) { setTyped(9999); return; } const id = setInterval(() => setTyped((n) => n + 3), 30); return () => clearInterval(id); }, [ended]);
   const review = (
     <div class="perf"><h3>{t('perf.h')}</h3>
@@ -142,7 +164,7 @@ function Act4() {
       <div class="doc4">
         {stable ? null : <div class="gone" aria-hidden="true" />}
         <h1 class="memo">{t('a4.h')}</h1>
-        {!ended ? <p class="memo intro4">{t('a4.intro')}</p> : null}
+        {!ended ? <p class="memo intro4">{t('a4.intro', { name: nameOf(s.seed, s.first) })}</p> : null}
         <ul class="eliminated" aria-live="polite">{gone.map((x, i) => <li key={x} class="memo muted">{t('a4.elim.' + i)}</li>)}</ul>
         {!ended && step <= 5 ? <h2 class="memo">{t('a4.step' + step)}</h2> : null}
         {lastTxt && !ended && step <= 6 ? <blockquote class="memo mail4"><b>{lastTxt[0]}</b><br />{lastTxt[2]}</blockquote> : null}
@@ -156,7 +178,7 @@ function Act4() {
             )}
           </div>
         ) : null}
-        {!ended && step === 4 ? <div class="a4act"><p class="memo">{s.name}, Employee #1000, is the last entry in the Directory. Their role: the Initiative’s badge. Their tenure: since the beginning.</p><div class="btnrow"><button class="btn danger" onClick={() => act((st) => S.a4Badge(st, 'A'))}>{t('a4.badgeA')}</button><button class="btn" onClick={() => act((st) => S.a4Badge(st, 'B'))}>{t('a4.badgeB')}</button></div></div> : null}
+        {!ended && step === 4 ? <Verdict /> : null}
         {!ended && step === 6 ? <div class="a4act">{review}<h3 class="memo">{t('a4.step6')}</h3><label class="slider"><span class="memo">{t('a4.nps')} <b>{nps}</b></span><input type="range" min={0} max={10} value={nps} onInput={(e) => setNps(Number((e.target as HTMLInputElement).value))} /></label><button class="btn primary" onClick={() => act((st) => S.a4Submit(st, nps))}>{t('a4.submit')}</button></div> : null}
         {ended && endMail ? (
           <div class="ending">
