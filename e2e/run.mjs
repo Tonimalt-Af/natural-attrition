@@ -23,7 +23,7 @@ const SCENES = [
   { name: 'act2-start', fx: 'act2-start' }, { name: 'act2-mid', fx: 'act2-mid' },
   { name: 'act2-redesign-modal', fx: 'act2-redesign', modal: true }, { name: 'act2-redesign', fx: 'act2-redesign', dismiss: true },
   { name: 'act2-pre-correction', fx: 'act2-pre-correction', lens: true }, { name: 'act2-correction', fx: 'act2-correction' },
-  { name: 'act3-start', fx: 'act3-start' }, { name: 'act3-mid', fx: 'act3-mid', tab: 'capital' }, { name: 'act3-lastcust', fx: 'act3-lastcust' },
+  { name: 'act3-start', fx: 'act3-start' }, { name: 'act3-mid', fx: 'act3-mid', tab: 'capital' }, { name: 'act3-orc', fx: 'act3-orc' }, { name: 'act3-lastcust', fx: 'act3-lastcust' },
   { name: 'act4', fx: 'act4' }, { name: 'act4-badge', fx: 'act4-badge' }, { name: 'act4-final', fx: 'act4-final' },
 ];
 

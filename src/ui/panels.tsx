@@ -163,7 +163,7 @@ export function Initiatives() {
   if (s.act >= 3) RACKS.forEach((rk, i) => { if ((i === 0 && !s.own.synth1) || (i === 1 && !s.own.synth2)) return; gens.push(<div class="init gen" key={'rk' + i}><div class="init-h"><b>{t('init.rk' + i)}</b><span class="count">{s.racks[i]}</span></div><div class="muted small">{t('init.rk.d')}</div><div class="init-f"><span class="cost">{money(S.rackCost(s, i))}</span><button class="btn" disabled={s.cash < S.rackCost(s, i)} onClick={() => act((st) => S.buyGen(st, 'rack', i))}>{t('init.buy')}</button></div></div>); });
   return (
     <div class="inits">
-      <div class="goal card"><span class="muted small">{t('init.next')}</span>{goal ? <><b>{initName(goal.id)}</b><span class="small">{goal.blocker === 'ready' ? t('goal.ready') : t('goal.' + goal.blocker, { n: goal.blocker === 'cash' ? money(goal.need) : num(goal.need), have: goal.blocker === 'cash' ? money(goal.have) : num(goal.have), eta: eta(goal.eta) })}</span></> : <span class="muted">{t('init.wait')}</span>}</div>
+      <div class="goal card"><span class="muted small">{t('init.next')}</span>{goal ? <><b>{initName(goal.id)}</b>{goal.orc ? <span class="small">{t('bid.orc.goal')}</span> : null}<span class="small">{goal.blocker === 'ready' ? t('goal.ready') : t('goal.' + goal.blocker, { n: goal.blocker === 'cash' ? money(goal.need) : num(goal.need), have: goal.blocker === 'cash' ? money(goal.have) : num(goal.have), eta: eta(goal.eta) })}</span></> : <span class="muted">{t('init.wait')}</span>}</div>
       {gens}
       {list.map((i) => <Card key={i.id} id={i.id} />)}
       {owned.length ? <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}><summary>{t('init.owned')} ({owned.length})</summary><ul class="ownedlist">{owned.map((i) => <li key={i.id}>{initName(i.id)}</li>)}</ul></details> : null}
@@ -260,12 +260,18 @@ export function Capital() {
 // ---------- Targets (Act II/III) ----------
 export function Targets() {
   const g = useGame(); const s = g.s; const d = g.d; if (s.act < 2 || s.act > 3) return null;
+  const why = s.targets.map((tg) => S.canBid(s, d, tg));
+  const allOrc = s.targets.length > 0 && why.every((w) => w === 'orc'), allCap = s.targets.length > 0 && why.every((w) => w === 'cap'), allCash = s.targets.length > 0 && why.every((w) => w === 'cash');
+  const rc = INITS.find((i) => i.id === 'regcap')!; const rcc = S.costOf(s, rc);
+  const rcEta = Math.max(rcc.slides > s.slides ? (rcc.slides - s.slides) / Math.max(d.slidesRate, 1e-6) : 0, rcc.cash > s.cash ? (rcc.cash - s.cash) / Math.max(d.pi, 1e-6) : 0);
+  const orcAny = why.some((w) => w === 'orc');
   return (
     <section class="card targets" aria-label={t('targets.h')}>
       <h3>{t('targets.h')}</h3>
+      {s.act === 3 && !s.own.regcap && orcAny && (allOrc || why.every((w) => w === 'orc' || w === 'cap')) ? <div class="banner orc" role="status"><span>{t('bid.banner.orc')}</span> <b>{t('bid.banner.orc2')}</b> <span class="muted small">{rcc.slides > s.slides ? `${num(rcc.slides)} Slides (${num(s.slides)} so far)` : `${num(rcc.slides)} Slides ✓`}{rcc.cash > 0 ? ` · ${money(rcc.cash)}` : ''} · {rcEta < 1 ? t('goal.ready') : `${t('init.afford')} ${eta(rcEta)}`}{S.visible(s, rc) ? '' : ' · appears at 40% consolidation'}</span></div> : allCap ? <div class="banner" role="status">{t('bid.banner.cap')}</div> : allCash ? <div class="banner" role="status">{t('bid.banner.cash')}</div> : null}
       <div class="tablewrap"><table class="data"><thead><tr><th>Company</th><th class="r">{t('targets.size')}</th><th class="r">{t('targets.cost')}</th><th /></tr></thead><tbody>
-        {s.targets.map((tg) => { const cost = S.bidCost(s, d, tg.size); const room = Math.max(0, d.debtCap - s.debt); const can = s.cash + room * 0.9 >= cost;
-          return <tr key={tg.id}><td>{tg.name}<div class="muted small">{t('culture.' + ['family', 'union', 'vc', 'founder'][tg.cult])}</div></td><td class="r">{int(tg.size)}</td><td class="r">{money(cost)}</td><td><button class="btn sm" disabled={!can} onClick={() => act((st) => S.bid(st, tg.id))}>{t('targets.bid')}</button></td></tr>; })}
+        {s.targets.map((tg, i) => { const cost = S.bidCost(s, d, tg.size); const w = why[i];
+          return <tr key={tg.id}><td>{tg.name}<div class="muted small">{t('culture.' + ['family', 'union', 'vc', 'founder'][tg.cult])}</div></td><td class="r">{int(tg.size)}</td><td class="r">{money(cost)}</td><td><button class="btn sm" disabled={!!w} title={w ? t('bid.' + w, { n: money(Math.max(0, cost - s.cash)) }) : ''} onClick={() => act((st) => S.bid(st, tg.id))}>{w ? t('bid.' + w, { n: money(Math.max(0, cost - s.cash)) }) : t('targets.bid')}</button></td></tr>; })}
       </tbody></table></div>
       <div class="muted small">Price per employee {money(d.price * d.stockF)} · stock-funded share {pct(1 - d.stockF)} cheaper at a high multiple.</div>
     </section>

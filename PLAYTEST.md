@@ -102,3 +102,6 @@ Idle (never touches anything): the company keeps attriting and earning, no crash
 - Act III UI is less polished than I–II; Act IV is deliberately bare.
 - No sound, no French, no Case Files screen, no Konami easter egg (see README deviations).
 - Real-human pacing is unknown; only the bot and screenshot checks were available.
+
+## Cycle 5b – Act III bids "enabled" but dead (reported by Adrien)
+Cause: `bid()` refused with `'orc'` (cumulative size > 50% of the economy without Regulatory Capture) and only mailed the ORC, while the Bid buttons only checked cash. Fix: pure `canBid()` in the engine; the target list disables each button with its reason (Walled off: ORC / Fully consolidated / Need $X) and shows one banner (satire + "Unlock: Regulatory Capture" with cost and ETA); the Next goal card points to Regulatory Capture when every bid is ORC-walled. Regulatory Capture now appears at 30% consolidation (was 40%), costs 3,000 Slides and 1 min of profit (was 4,000 / 5 min); aggressive/clicky bots now buy it within ~1 min of hitting the wall (was never). Tests cover canBid purity, the goal card, and a ≤2.5 min wall wait for both bots. New fixture/screenshot `act3-orc`.

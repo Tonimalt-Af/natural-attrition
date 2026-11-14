@@ -247,6 +247,7 @@ export function visible(s: State, it: Init): boolean {
     case 'e8m': return s.act >= 2 && E >= 8e6;
     case 'a3': return s.act >= 3;
     case 'phi40': return s.act >= 3 && E / A2.N0 >= 0.4;
+    case 'phi30': return s.act >= 3 && E / A2.N0 >= 0.3;
   }
   return true;
 }
@@ -331,15 +332,24 @@ function startAct4(s: State) {
 // ---------- Act II+ actions ----------
 export function day1Frac(s: State) { return clamp(A2.DAY1_BASE + A2.DAY1_INT * s.intensity, 0.3, 0.55); }
 export function bidCost(s: State, d: Derived, size: number) { return size * d.price * d.stockF; }
+/** Pure check (no side effects): why a bid on this target cannot go through right now ('' = it can). */
+export function canBid(s: State, d: Derived, tg: Target): '' | 'act' | 'orc' | 'cap' | 'cash' {
+  if (s.act < 2 || s.act > 3) return 'act';
+  if (s.act === 3 && !s.own.regcap && (s.U + s.I + tg.size) / A2.N0 > A3.ORC_PHI) return 'orc';
+  if (s.U + s.I + tg.size > A2.N0 * 0.995) return 'cap';
+  const cost = bidCost(s, d, tg.size); const room = Math.max(0, d.debtCap - s.debt);
+  if (s.cash + room * 0.9 < cost) return 'cash';
+  return '';
+}
 export function bid(s: State, targetId: number): string {
   if (s.act < 2 || s.act > 3) return 'act';
   const ti = s.targets.findIndex((t) => t.id === targetId); if (ti < 0) return 'none';
   const d = derive(s); const tg = s.targets[ti];
-  if (s.act === 3 && !s.own.regcap && (s.U + s.I + tg.size) / A2.N0 > A3.ORC_PHI) { mail(s, 'a3_orc_block'); return 'orc'; }
-  if (s.U + s.I + tg.size > A2.N0 * 0.995) return 'cap';
+  const why = canBid(s, d, tg);
+  if (why === 'orc') { mail(s, 'a3_orc_block'); return 'orc'; }
+  if (why) return why;
   const cost = bidCost(s, d, tg.size);
   const room = Math.max(0, d.debtCap - s.debt);
-  if (s.cash + room * 0.9 < cost) return 'cash';
   let fromCash = Math.min(cost, Math.max(0, s.cash));
   if (s.flags.debtFirst) fromCash = Math.max(0, cost - room);
   fromCash = Math.min(fromCash, Math.max(0, s.cash));
@@ -618,7 +628,7 @@ export function summary(s: State) {
 export { gauss };
 
 // ---------- "Next goal": what is actually blocking, and for how long ----------
-export interface Goal { id: string; blocker: 'slides' | 'cash' | 'h' | 'ready'; eta: number; need: number; have: number }
+export interface Goal { id: string; blocker: 'slides' | 'cash' | 'h' | 'ready'; eta: number; need: number; have: number; orc?: boolean }
 export function nextGoal(s: State, d: Derived): Goal | null {
   let best: Goal | null = null;
   for (const it of INITS) {
@@ -632,6 +642,14 @@ export function nextGoal(s: State, d: Derived): Goal | null {
     else if (eS >= eC) g = { id: it.id, blocker: 'slides', eta: eS, need: c.slides, have: s.slides };
     else g = { id: it.id, blocker: 'cash', eta: eC, need: c.cash, have: s.cash };
     if (!best || g.eta < best.eta || (g.eta === best.eta && g.blocker === 'ready' && best.blocker !== 'ready')) best = g;
+  }
+  // Every target is walled off by the Office of Reasonable Concern: the real next goal is whatever removes the wall.
+  if (s.act === 3 && !s.own.regcap && s.targets.length && s.targets.every((tg) => canBid(s, d, tg) === 'orc')) {
+    const it = INITS.find((x) => x.id === 'regcap')!; const c = costOf(s, it);
+    const eS = c.slides > s.slides ? (c.slides - s.slides) / Math.max(d.slidesRate, 1e-6) : 0;
+    const eC = c.cash > s.cash ? (d.pi > 1e-6 ? (c.cash - s.cash) / d.pi : Infinity) : 0;
+    if (eS === 0 && eC === 0) return { id: it.id, blocker: 'ready', eta: 0, need: 0, have: 0, orc: true };
+    return eS >= eC ? { id: it.id, blocker: 'slides', eta: eS, need: c.slides, have: s.slides, orc: true } : { id: it.id, blocker: 'cash', eta: eC, need: c.cash, have: s.cash, orc: true };
   }
   return best;
 }

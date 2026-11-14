@@ -81,3 +81,30 @@ describe('save migration v2 -> v3', () => {
     expect(Number.isFinite(s.cash)).toBe(true); expect(Number.isFinite(s.U + s.I)).toBe(true);
   });
 });
+
+describe('Act III ORC wall', () => {
+  const act3 = () => { const s = run({ seed: 1, mode: 'aggressive', maxMin: 200, stopAct: 3 }).s; return s; };
+  it('canBid is pure and agrees with bid() about the reason', () => {
+    const s = act3(); const d = S.derive(s); s.own.regcap = 0 as unknown as number; delete s.own.regcap;
+    const tg = { ...s.targets[0], size: Math.round(0.6 * 150e6) };
+    s.targets[0] = tg; s.cash = 1e15;
+    const snap = JSON.stringify(s);
+    expect(S.canBid(s, d, tg)).toBe('orc'); expect(JSON.stringify(s)).toBe(snap); // no mail, no mutation
+    expect(S.bid(s, tg.id)).toBe('orc');
+    s.own.regcap = 1; s.targets[0] = { ...tg, size: Math.round(0.6 * 150e6) };
+    expect(S.canBid(s, S.derive(s), s.targets[0])).toBe('');
+  });
+  it('the Next goal points at Regulatory Capture when every bid is walled', () => {
+    const s = act3(); delete s.own.regcap; const d = S.derive(s);
+    s.targets = s.targets.map((tg) => ({ ...tg, size: Math.round(0.6 * 150e6) }));
+    const g = S.nextGoal(s, d)!; expect(g.id).toBe('regcap'); expect(g.orc).toBe(true);
+  });
+  for (const mode of ['aggressive', 'clicky'] as const) it(`${mode} bot never sits behind the wall for more than 2.5 min`, () => {
+    let blocked = 0, worst = 0;
+    run({ seed: 1, mode, maxMin: 200, hook: (s) => {
+      if (s.act !== 3) return; const d = S.derive(s);
+      if (!s.own.regcap && s.targets.length && s.targets.every((tg) => S.canBid(s, d, tg) === 'orc')) { blocked += TICK; worst = Math.max(worst, blocked); } else blocked = 0;
+    } });
+    expect(worst / 60).toBeLessThanOrEqual(2.5);
+  }, 60000);
+});

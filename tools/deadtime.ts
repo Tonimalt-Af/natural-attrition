@@ -18,7 +18,7 @@ function hasOptions(s: State, d: S.Derived, g: S.Goal | null): boolean {
   }
   if (s.act >= 2) {
     const room = Math.max(0, d.debtCap * 0.75 - s.debt);
-    for (const tg of s.targets) { const c = S.bidCost(s, d, tg.size); if (c <= s.cash + room * 0 && c <= Math.max(room, 0) + s.cash) { if (c <= s.cash || (c <= room && s.flags.debtFirst)) return true; } }
+    for (const tg of s.targets) { const c = S.bidCost(s, d, tg.size); if (S.canBid(s, d, tg) === '' && (c <= s.cash || (c <= room && s.flags.debtFirst))) return true; }
     if (s.U > 0) for (let i = 0; i < TIERS.length; i++) { if (i > 0 && s.rc[i - 1] < TIERS[i].unlockPrev) continue; if (S.tierCost(s, i) <= s.cash && d.rcEff > 0 && TIERS[i].yield / Math.max(d.rcEff, 1) >= 0.05) return true; }
     if (s.act >= 3) for (let i = 0; i < RACKS.length; i++) { if ((i === 0 && !s.own.synth1) || (i === 1 && !s.own.synth2)) continue; if (S.rackCost(s, i) <= s.cash) return true; }
   }

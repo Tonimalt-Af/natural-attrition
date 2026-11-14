@@ -17,6 +17,7 @@ const want: Record<string, (s: State) => boolean> = {
   'act2-correction': (s) => s.act === 2 && s.corr === 1,
   'act3-start': (s) => s.act === 3 && s.t - s.actT[1] >= 20,
   'act3-mid': (s) => s.act === 3 && S.derive(s).lambdaC >= 0.4,
+  'act3-orc': (s) => { if (s.act !== 3 || s.own.regcap || !s.targets.length) return false; const d = S.derive(s); return s.targets.every((tg) => S.canBid(s, d, tg) === 'orc') && d.lambdaC > 0.2; },
   'act3-lastcust': (s) => s.act === 3 && s.lastCust === 1,
   'act4': (s) => s.act === 4 && s.t - s.actT[2] >= 5,
   'act4-badge': (s) => s.act === 4 && s.a4.step === 4,
