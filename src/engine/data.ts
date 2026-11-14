@@ -55,7 +55,7 @@ export const INITS: Init[] = [
   { id: 'cip3', act: 1, slides: 315, cash: 135000, req: 'copilot' },
   { id: 'telemetry', act: 1, slides: 405, cash: 0, req: 'cip3' },
   { id: 'recog', act: 1, slides: 40, cash: 0, gate: 'min8' },
-  { id: 'memo', act: 1, slides: 675, cash: 270000, gate: 'h520' },
+  { id: 'memo', act: 1, slides: 675, cash: 90000, gate: 'h520' },
   // Act II
   { id: 'lev1', act: 2, slides: 300, cash: 2e6, gate: 'a2' },
   { id: 'procure', act: 2, slides: 120, cash: 0, gate: 'assoc8' },

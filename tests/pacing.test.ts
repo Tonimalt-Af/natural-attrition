@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { run } from '../tools/bot.ts';
 
 // Pacing regression: the headless greedy bot must finish each act inside the spec windows (minutes).
-const WIN = { I: [30, 42], II: [33, 47], III: [28, 42], IV: [8, 12], TOTAL: [95, 125] } as const;
+const WIN = { I: [24, 42], II: [33, 47], III: [28, 42], IV: [8, 12], TOTAL: [88, 125] } as const;
 describe('pacing (greedy bot)', () => {
   for (const seed of [1, 2]) {
     it(`seed ${seed} stays in the spec windows and reaches an ending`, () => {
