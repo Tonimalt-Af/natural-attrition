@@ -94,7 +94,7 @@ export const CIP_RATE: Record<string, number> = { cip1: 0.03, cip2: 0.08, cip3: 
 
 export const A2 = {
   P0: 175, P_EXP: 0.12, N0: 150e6,
-  PI_U: 0.055, PI_I: 0.505, PI_AI: 0.30, PI_LIGHTS: 0.04, KAPPA: 0.62, KAPPA_AI: 0.30, KAPPA_LIGHTS: 0.08,
+  PI_U: 0.055, PI_I: 0.505, PI_AI: 0.30, PI_LIGHTS: 0.04, KAPPA: 0.62, KAPPA_AI: 0.30, KAPPA_LIGHTS: 0.08, HUM_KAPPA: 0.85, HUM_KAPPA_AI: 0.13, HUM_KAPPA_LIGHTS: 0.02,
   INTEREST: 0.06 / 250, LEV_BASE: 3,
   ADDBACK: [0, 0.15, 0.35, 0.7, 1.5],
   AUDIT_H: 0.0004, AUDIT_FROM: 0.4, AUDIT_FIRST: 2e10, // USD, ×10 each

@@ -72,9 +72,11 @@ export function derive(s: State): Derived {
     const mcReal = Math.max(s.piS, 2) * DAYS_PER_YEAR * mTot0 * USD_PER_U;
     return Object.assign(d, { q, Ld, R, pay: s.pay + s.contrPay, oh, pi, piRep: pi, H, humans: H, incPen, slidesRate: slidesRate * (s.opt.tmpl ? 1.25 : 1), mRep: mTot0, mcRep: mcReal, mcReal, kappa: 0, leak: 0, dm: 1, lambdaC: 0, rcEff: 0, debtCap: 0, rackYield: 0, credit: 0, hdRatio: 0, upkeep }) as Derived;
   }
-  const kappa = A2.KAPPA + A2.KAPPA_AI * ai + A2.KAPPA_LIGHTS * lights;
+  const kappaE = A2.KAPPA + A2.KAPPA_AI * ai + A2.KAPPA_LIGHTS * lights; // economic automation share (Closed Loop)
+  // Human automation share (what the player sees): integrated roles keep few humans, Colleagues shrink it, Lights-Out ends it.
+  const kappa = Math.min(1, A2.HUM_KAPPA + A2.HUM_KAPPA_AI * ai + A2.HUM_KAPPA_LIGHTS * lights);
   const base = A2.PI_U * s.U + (A2.PI_I + A2.PI_AI * ai + A2.PI_LIGHTS * lights) * s.I;
-  const C = s.I * kappa;
+  const C = s.I * kappaE;
   const Ceff = C * (1 - 0.5 * retain);
   const leak = A3.EPS * phi * phi * Ceff;
   const c = A3.CREDIT_MAX * creditShare;
@@ -316,7 +318,7 @@ function startAct2(s: State) {
   s.act = 2; s.actT[0] = s.t;
   const H = humansAlive(s);
   s.I = 1000; s.U = 0;
-  const kappa = A2.KAPPA + A2.KAPPA_AI * aiLevel(s);
+  const kappa = A2.HUM_KAPPA + A2.HUM_KAPPA_AI * aiLevel(s);
   // Signed: an HQ already leaner than the integrated average stays lean (no phantom rehiring at the zoom-out).
   s.hqExcess = H - 1000 * (1 - kappa);
   s.tiles = [{ name: 'Nullwater HQ', size: 1000, left: 0, cult: 2 }];
