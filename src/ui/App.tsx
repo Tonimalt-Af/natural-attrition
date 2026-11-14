@@ -146,7 +146,7 @@ function Act4() {
         {lastTxt && !ended && step <= 6 ? <blockquote class="memo mail4"><b>{lastTxt[0]}</b><br />{lastTxt[2]}</blockquote> : null}
         {!ended && step <= 3 || (!ended && step === 5) ? (
           <div class="a4act">
-            {a.running ? (<><div class="bar big" role="progressbar" aria-valuenow={Math.round((a.prog / need) * 100)}><i style={{ width: `${(a.prog / need) * 100}%` }} /></div><p class="memo muted">{STATUS[Math.floor((a.prog / need) * STATUS.length)] ?? STATUS[5]}</p></>) : (
+            {a.running ? (<><div class="bar big" role="progressbar" aria-label="Review progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((a.prog / need) * 100)}><i style={{ width: `${(a.prog / need) * 100}%` }} /></div><p class="memo muted">{STATUS[Math.floor((a.prog / need) * STATUS.length)] ?? STATUS[5]}</p></>) : (
               <>{step > 0 && step <= 3 ? <div class="btnrow tone">{[t('a4.agree'), t('a4.question'), t('a4.resign')].map((x, i) => <button key={i} class={'btn' + (a.tone[step - 1] === i ? ' on' : '')} onClick={() => act((st) => S.a4Tone(st, i))}>{x}</button>)}</div> : null}
                 <button class="btn primary" onClick={() => act((st) => S.a4Run(st))}>{step === 5 ? t('a4.sunset') : t('a4.run')}</button></>
             )}

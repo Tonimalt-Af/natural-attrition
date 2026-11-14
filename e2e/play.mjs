@@ -50,7 +50,9 @@ await p.close();
 for (const badge of ['A', 'B']) {
   p = await fresh();
   await p.evaluate(async (x) => { await window.__nat.doImport(x); }, fx('act3-lastcust')); await p.waitForTimeout(400); await dismiss(p);
-  await p.evaluate(() => { const g = window.__nat.G; g.speed = 256; });
+  await p.evaluate(() => { const g = window.__nat.G; g.speed = 256; g.s.cash = 1e15; });
+  // a real player must still buy the Act III closers: click every enabled initiative button a few times
+  for (let k = 0; k < 12 && (await G(p, () => window.__nat.G.s.act)) === 3; k++) { for (const b of await p.$$('.inits .init .btn:not([disabled])')) { try { await b.click({ timeout: 500 }); } catch { /* */ } } await p.waitForTimeout(500); }
   await p.waitForFunction(() => window.__nat.G.s.act === 4, null, { timeout: 120000 }).catch(() => {});
   ok((await G(p, () => window.__nat.G.s.act)) === 4, `act IV reached (badge ${badge})`);
   await p.waitForTimeout(400);

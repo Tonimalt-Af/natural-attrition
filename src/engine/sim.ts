@@ -36,7 +36,8 @@ export function derive(s: State): Derived {
   const retain = s.act >= 3 ? mix[0] : 0;
   const creditShare = s.act >= 3 && s.own.bnpl ? mix[1] : 0;
   const synthShare = s.act >= 3 ? mix[2] : 0;
-  const incPen = (s.t < s.incUntil ? A1.INC_PEN : 0) + (s.t < s.hallUntil ? A1.HAL_PEN : 0);
+  // Incidents/hallucinations eat a share of *profit* (plus a sliver of revenue), so a thin early margin never turns into a death spiral.
+  const incPen = (s.t < s.incUntil ? A1.INC_PEN : 0) + (s.t < s.hallUntil ? A1.HAL_PEN * 3 : 0);
   const slumpF = (s.t < s.slumpUntil ? s.slump : 1) * (s.S > 60 ? 0.9 : 1);
   const E = s.act === 1 ? humansAlive(s) : s.U + s.I;
   const phi = s.act === 1 ? 0 : E / A2.N0;
@@ -64,9 +65,10 @@ export function derive(s: State): Derived {
     const hot = s.own.hotdesk ? 0.02 * H + 10 : 0;
     const oh = A1.OH_BASE + A1.OH_PER * H - hot;
     const upkeep = A1.ASSOC_UPKEEP * s.assoc;
-    const pi = R * (1 - incPen) - (s.pay + s.contrPay) - oh - upkeep;
+    const pi0 = R - (s.pay + s.contrPay) - oh - upkeep;
+    const pi = pi0 - Math.min(incPen, 0.9) * Math.max(pi0, 0) - (incPen > 0 ? 0.004 * R : 0);
     const slidesRate = A1.SLIDES_BASE + A1.SLIDES_MGT * q * (s.lc[7] + s.lcx[7]) + A1.ASSOC_SLIDES * s.assoc + 0.4 * s.nContr;
-    const mcReal = Math.max(s.piS, 0) * DAYS_PER_YEAR * mTot0 * USD_PER_U;
+    const mcReal = Math.max(s.piS, 2) * DAYS_PER_YEAR * mTot0 * USD_PER_U;
     return Object.assign(d, { q, Ld, R, pay: s.pay + s.contrPay, oh, pi, piRep: pi, H, humans: H, incPen, slidesRate: slidesRate * (s.opt.tmpl ? 1.25 : 1), mRep: mTot0, mcRep: mcReal, mcReal, kappa: 0, leak: 0, dm: 1, lambdaC: 0, rcEff: 0, debtCap: 0, rackYield: 0, credit: 0, hdRatio: 0, upkeep }) as Derived;
   }
   const kappa = A2.KAPPA + A2.KAPPA_AI * ai + A2.KAPPA_LIGHTS * lights;
