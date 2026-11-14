@@ -120,5 +120,5 @@ export function startLoop() {
   addEventListener('keyup', (e) => { if (e.key === 'r' || e.key === 'R') { G.lens = false; notify(); } });
 }
 (window as unknown as Record<string, unknown>).__G = G;
-(window as unknown as Record<string, unknown>).__nat = { doImport, G, saveNow };
+(window as unknown as Record<string, unknown>).__nat = { doImport, G, saveNow, notify };
 export { defaultOpts };

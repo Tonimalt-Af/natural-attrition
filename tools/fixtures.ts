@@ -16,7 +16,7 @@ const want: Record<string, (s: State) => boolean> = {
   'act2-pre-correction': (s) => s.act === 2 && s.U + s.I >= 1.5e7,
   'act2-correction': (s) => s.act === 2 && s.corr === 1,
   'act3-start': (s) => s.act === 3 && s.t - s.actT[1] >= 20,
-  'act3-stall': (s) => s.act === 3 && s.t - s.actT[1] >= 60 && s.reh === 0,
+  'act3-stall': (s) => s.act === 3 && s.t - s.actT[1] >= 45,
   'act3-mid': (s) => s.act === 3 && s.reh >= 25,
   'act3-late': (s) => s.act === 3 && s.dm >= 0.7,
   'act3-finale': (s) => s.act === 3 && S.finaleState(s) === '',

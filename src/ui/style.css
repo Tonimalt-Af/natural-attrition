@@ -222,3 +222,4 @@ table.data th.r { text-align: right; }
 .hoe { border-color: var(--accent); } .hoe.ready { box-shadow: 0 0 0 2px var(--accent); } .hoe p { margin: 4px 0 8px; } .hoe .btn { margin-top: 8px; width: 100%; }
 .verdict-l { margin: 6px 0 10px; padding-left: 1.2em; }
 @media (max-width: 560px) { .meters { grid-template-columns: 1fr; } .deskrow { grid-template-columns: 1fr auto; } .deskrow .dr-fx { grid-column: 1; grid-row: 2; } .deskrow .btn { grid-row: 1 / span 2; grid-column: 2; min-height: 40px; } }
+@media (min-width: 700px) { .pgoal { display: none; } }

@@ -32,7 +32,7 @@ async function axe(p, label) {
 }
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
 let totalSerious = 0;
-for (const [name, stable] of [['act1-mid', false], ['act2-mid', false], ['act2-mid', true], ['act3-mid', false], ['act4', false]]) {
+for (const [name, stable] of [['act1-mid', false], ['act2-mid', false], ['act2-mid', true], ['act3-mid', false], ['act3-mid', true], ['act3-finale', false], ['act4', false]]) {
   const p = await open(ctx, name, stable);
   const r = await axe(p, `${name}${stable ? '/stable' : ''}`);
   totalSerious += r.filter((v) => ['serious', 'critical'].includes(v.impact)).length;

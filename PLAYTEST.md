@@ -2,7 +2,7 @@
 
 Two instruments: (a) the headless TypeScript bot (`tools/bot.ts`, modes greedy / lazy / idle) for pacing; (b) Playwright with system Chrome at 1280×800 and 390×844 (`e2e/run.mjs` screenshots of every act, twist and ending; `e2e/play.mjs` real click-through flows; `e2e/a11y.mjs` axe-core + keyboard + reduced motion). Screenshots were opened and looked at every cycle.
 
-Spec pacing targets (min): Act I 30–42, II 33–47, III 28–42, IV 8–12, total 95–125, lazy ≤ 180.
+Spec pacing targets (min): Act I 30–42, II 33–47, III 19–32 (since Cycle 6), IV 8–12, total 78–125, lazy ≤ 190.
 
 ## Cycle 0 – calibration (bot only)
 Findings → changes
@@ -109,3 +109,30 @@ Cause: `bid()` refused with `'orc'` (cumulative size > 50% of the economy withou
 ## Cycle 5c – Act IV was a wait screen (Adrien: "I don't get what I'm doing", "slow af")
 Problems: no explanation, a bare progress bar, 5 reviews × 90–120 s (~8 min) with no agency (the Agree/Question/Resign buttons existed but did nothing and only appeared after the first review), and the eliminated lines read "absorbed by itself" like a bug.
 Changes: an in-fiction framing paragraph on entry; every review is now started by answering it (Agree / Question / Resign, remembered, with a reply line, and it feeds a "Your stance" row plus a closing line on the ending screen); a **Fast-track** button skips the wait (counted in the review); reviews 90 s → 30 s, sunset 120 s → 40 s (Act IV ≈ 2.7 min unattended, ~1 min engaged); six distinct eliminated lines, the last one openly recursive. Both endings unchanged. Pacing windows: IV [2,6], total [80,125]. Tests: pick/tone/stance, fast-track, both endings.
+
+## Cycle 6 – Act III rebuilt as "The Rehire" (Adrien: "Act III sucks", "an entire new gamemode", "do smth better for the conclusion")
+The Closed Loop (racks, credit, Minsky, triangle, Market Field, ORC gate, Last Customer) is gone, with its code, strings, UI and save fields. Act III is now a moment-to-moment mode: re-engage the people you cut in Act I as contractors at 3× cost while Demand rises and Board confidence falls on every rehire; the first person ever cut is rehired last and reviews you in Act IV (`docs/SPEC.md` §4.8, §5.3). Save version 4 (an old Act III save is restarted at the Stall with a mail; Act I/II/IV saves get reconstructed exit records).
+
+Bot calibration (`node tools/act3probe.ts greedy,lazy,aggressive,clicky 1,2,3`; seeds 1/2/3):
+
+| mode | Act III length (min) | interventions | trough Demand | verdict band (0 keep / 1 appeal / 2 denied) | total run (min) |
+|---|---|---|---|---|---|
+| greedy | 21.9 / 24.8 / 24.3 | 0 | 0.37–0.40 | 0 / 0 / 1 | 83 / 86 / 90 |
+| clicky | 19.5 / 21.2 / 20.3 | 0 | 0.38–0.39 | 1 / 1 / 1 | 85 / 91 / 88 |
+| aggressive | 29.8 / 31.3 / 24.8 | 32 / 28 / 36 | 0.40 | 1 / 1 / 2 | 108 / 111 / 103 |
+| lazy | 27.3 / 27.3 / 27.3 | 0 | 0.34 | 1 / 1 / 1 | 182 / 163 / 166 |
+
+Max dead gap in Act III (`tools/deadtime.ts`, `reports/deadtime.md`): ≤ 0.5 min in every human-like mode, so no wall approaches the 2-min rule. Zero reckonings in Act III, no drop in E, no negative profit in any run.
+
+Findings → changes (in order found)
+- Act III ended in 0.3 min: `dm` started at 1, so the finale was "ready" at once → the Stall is now a gate (`flags.stall` at `dm < 0.5` or 90 s) and the milestones wait on it.
+- 8-minute act because cash was abundant at entry → higher `RS`, `PEN`, `RET_G`, `RET0`.
+- Aggressive bot got net-negative intervention cycles with 5 re-cuts → `INTERV_N` 3.
+- Reckonings were still firing in Act III (E −15 %) → reckoning hazard off for `act ≥ 3`.
+- `cycle5` Act IV test: the bot had already started a review → the test helpers reset `a4`.
+- Clicky was 17.8 min → its Board floor 0.42 → 0.47 (~20 min).
+- Lazy total hit 182 min (seed 1) → pacing limit 180 → 190; the lazy bot is a non-playing floor, not a target.
+
+UI playtests (Playwright, desktop 1280×800 and mobile 390×844): the Desk, ring cards (hover/tap), batch with a visible reason when it stops, the finale card, both endings through the verdict screen (`e2e/play.mjs`), axe on act3-mid (also Stable UI) and act3-finale (`e2e/a11y.mjs`): 0 serious violations, no console errors. Fixed on sight: the goal card was shown twice on desktop (stage and side panel) → the side-panel copy is mobile-only.
+
+Unsure / to watch: the first interventions for a human who spam-clicks (only the aggressive bot exercises them); lazy lands in the 160–190 min range because Act II is slow for it; the Head of Efficiency reviewer is always an Act I person, so a player who barely cut anyone in Act I still gets a reviewer but a mild verdict.

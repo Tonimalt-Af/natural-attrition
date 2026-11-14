@@ -23,7 +23,7 @@ const SCENES = [
   { name: 'act2-start', fx: 'act2-start' }, { name: 'act2-mid', fx: 'act2-mid' },
   { name: 'act2-redesign-modal', fx: 'act2-redesign', modal: true }, { name: 'act2-redesign', fx: 'act2-redesign', dismiss: true },
   { name: 'act2-pre-correction', fx: 'act2-pre-correction', lens: true }, { name: 'act2-correction', fx: 'act2-correction' },
-  { name: 'act3-start', fx: 'act3-start' }, { name: 'act3-mid', fx: 'act3-mid', tab: 'capital' }, { name: 'act3-orc', fx: 'act3-orc' }, { name: 'act3-lastcust', fx: 'act3-lastcust' },
+  { name: 'act3-start', fx: 'act3-start' }, { name: 'act3-stall', fx: 'act3-stall' }, { name: 'act3-mid', fx: 'act3-mid' }, { name: 'act3-card', fx: 'act3-mid', selDead: true }, { name: 'act3-late', fx: 'act3-late' }, { name: 'act3-finale', fx: 'act3-finale', selFirst: true }, { name: 'act3-capital', fx: 'act3-mid', tab: 'capital' },
   { name: 'act4', fx: 'act4' }, { name: 'act4-badge', fx: 'act4-badge' }, { name: 'act4-final', fx: 'act4-final' },
 ];
 
@@ -45,6 +45,7 @@ for (const vp of VPS) {
       else if (!sc.dismiss && await page.$('#rd-ok')) { await page.waitForTimeout(3100); await page.click('#rd-ok'); await page.waitForTimeout(200); }
       if (sc.dismiss) { await page.waitForTimeout(3100); await page.click('#rd-ok'); await page.waitForTimeout(300); }
       if (sc.lens) { await page.evaluate(() => { window.__nat.G.lens = true; window.__nat.G.s.stats.clicks += 0; }); await page.waitForTimeout(400); }
+      if (sc.selDead || sc.selFirst) { await page.evaluate((first) => { const { G, notify } = window.__nat; const s = G.s; let pick = -1; for (let i = 0; i < s.dept.length; i++) if (!(s.fl[i] & 1) && s.cutT[i] > 0 && i !== s.first) { pick = i; break; } G.sel = first ? s.first : pick; notify(); }, !!sc.selFirst); await page.waitForTimeout(300); }
       if (sc.tab) { if (vp.mobile) { await page.click('.tabbar button:nth-child(4)'); } else { await page.click('.tabs button:has-text("Capital")'); } await page.waitForTimeout(300); }
     }
     await page.screenshot({ path: `shots/${tag}-${vp.id}-${sc.name}.png`, fullPage: !!args.full });

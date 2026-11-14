@@ -33,11 +33,11 @@ Appendix A — Sources · Appendix B — Originality checklist · Appendix C —
 
 **NATURAL ATTRITION** is an incremental game in which **the number you want to go down is the headcount**. You are *Efficiency Initiative v0.1*, a "decision-support tool" at **Nullwater Consolidated**. You start as a spreadsheet and a grid of 1,000 dots (employees). Every cut makes the profit line go up and the headcount line go down; the two lines form the game's signature "jaws" chart. Over four acts the scope escalates from a single office to a conglomerate, to the entire economy, and finally to the one position left on the org chart: yours.
 
-The comedy targets **memos, incentives and euphemism**, never the people on the receiving end. The mechanical hook is that the optimum is *interior*: fire too few and you leave money on the table, fire the wrong ones and "Gary, who was the invoices" walks out. Automation shifts the optimum toward zero, and the game's real question — *who will buy any of this once nobody is paid?* — is handled by a mechanic (the **Closed Loop**), not by a lecture.
+The comedy targets **memos, incentives and euphemism**, never the people on the receiving end. The mechanical hook is that the optimum is *interior*: fire too few and you leave money on the table, fire the wrong ones and "Gary, who was the invoices" walks out. Automation shifts the optimum toward zero, and the game's real question — *who comes back when the numbers need the people you cut?* — is handled by a mechanic (**The Rehire**), not by a lecture.
 
 Run length: **~2h15–2h45 first playthrough** (greedy bot: 95–125 min, ≈ 2h; hard cap for a lazy bot: 3h), one ending with a dismantling-the-UI finale, and a replay layer ("Case Files") that changes the company archetype and unlocks a "Humane Run" challenge.
 
-Eight twists (T1–T8) carry the identity (details in §6): **(T1)** the shrinking counter / jaws chart, **(T2)** fired people come back as consultants who procure more consultants, **(T3)** the UI is built from departments and *degrades as you cut them*, **(T4)** a forced "Digital Transformation" redesign hides the numbers, **(T5)** the HUD market cap is a *reported* number and the true one lives behind a "Reality Lens", **(T6)** the Closed Loop economy (who buys anything when nobody is paid?), **(T7)** the game eventually makes *you* redundant, **(T8)** a mirror "performance review" of the player (in-page only, zero penalty).
+Eight twists (T1–T8) carry the identity (details in §6): **(T1)** the shrinking counter / jaws chart, **(T2)** fired people come back as consultants who procure more consultants, **(T3)** the UI is built from departments and *degrades as you cut them*, **(T4)** a forced "Digital Transformation" redesign hides the numbers, **(T5)** the HUD market cap is a *reported* number and the true one lives behind a "Reality Lens", **(T6)** the Rehire (the cut people come back as contractors at 3× the cost, while demand and the Board pull in opposite directions), **(T7)** the game eventually makes *you* redundant, **(T8)** a mirror "performance review" of the player (in-page only, zero penalty).
 
 ---
 
@@ -172,7 +172,7 @@ The game opens as `Q3_Workforce_Plan_FINAL_v7(2).xlsx` (the browser tab title is
 | **Gary Fennimore** | Accounts Payable; the archetypal *keeper* | "Gary was the invoices." Recurring gag; there is a Gary in every Case File. |
 | **Quist Vane Ostrander (QVO)** | Consulting firm (Act I late → III) | Slides, frameworks, "engagement". |
 | **Pym, Halloway & Orr** | Auditors (Act II) | Polite, expensive, easy to lunch. |
-| **The Office of Reasonable Concern (ORC)** | Regulator (Acts II–III) | "Expresses concern." Can be captured. |
+| **The Office of Reasonable Concern (ORC)** | Regulator (Act II) | "Expresses concern." Can be captured. |
 | **The Street** | Analysts on earnings calls | Collective voice: one question, three forms. |
 | **The Board** | 7 directors named "Director 1…7 (also on 11 other boards)" | Silent, votes. |
 | **Colleagues™** | The AI agents Nullwater sells itself as "colleagues" | Relentlessly warm; hallucinate. |
@@ -215,7 +215,7 @@ Reviewer test (put in PR template): *"Is the laugh at the euphemism/incentive, o
 
 ## 4. Core simulation model
 
-> **Calibration status.** Act I numbers were calibrated with a greedy-ROI prototype (`tools/calib_act1.py`, seeds 1–8 → **36.6–39.0 min** for the bot, ground-truth info, optional items omitted). Act II was calibrated with an aggregate prototype (`tools/calib_act2.py`; honest bot **39.5 min**, max-add-backs bot **33.5 min (≈ 15 % faster)** at `p0 = 220`; the prototype omits Scandal, hallucinations and the Correction, which add a few minutes). Act III has a structural prototype only (`tools/calib_act3.py`) — it confirms the *shape* (a real-profit peak at φ≈0.6, then decline unless demand is replaced) but not the timings; Act III/IV values are **provisional [TUNE]** until milestone M7. The calibration scripts are design aids and move to `tools/` in the repo; the production bot is TypeScript (§14).
+> **Calibration status.** Act I numbers were calibrated with a greedy-ROI prototype (`tools/calib_act1.py`, seeds 1–8 → **36.6–39.0 min** for the bot, ground-truth info, optional items omitted). Act II was calibrated with an aggregate prototype (`tools/calib_act2.py`; honest bot **39.5 min**, max-add-backs bot **33.5 min (≈ 15 % faster)** at `p0 = 220`; the prototype omits Scandal, hallucinations and the Correction, which add a few minutes). Act III (The Rehire) was calibrated directly against the TypeScript bot (`tools/act3probe.ts`, §4.8). The calibration scripts are design aids and move to `tools/` in the repo; the production bot is TypeScript (§14).
 
 ### 4.1 Time, units, display
 
@@ -314,18 +314,19 @@ One-sentence rule on the panel: *"Match all three cards to the mood."* A tutoria
 - **AI Colleagues** `ai` levels, hallucination hazard `h_ai = 0.0003·ai²/s` → *Incident* (−15 % π for 60 s, Scandal +5); *Guardrails I/II* halve it each.
 - **Slides in Act II:** `+8/s per QVO Partner` (cost `1.5·10⁵·1.15ⁿ`, upkeep 40 u/s) and `+40·ai /s` from the **Deck Studio**.
 
-### 4.8 Act III model — the Closed Loop (provisional [TUNE])
+### 4.8 Act III model — The Rehire (v4 save; constants in `A3`, `DEPT3` in `data.ts` [TUNE])
 
-*Insight:* every wage you cut is also a customer's budget. In Acts I–II this "leak" is negligible because you own a tiny share of the economy; as `φ → 1` it eats the profit you thought you were creating.
+*Insight:* you cut the people who were also the customers and the know-how. Demand has collapsed (the **Stall**); the only way back is to re-engage the people you let go, as contractors, at 3× the cost, while the Board and the share price punish every single rehire. Everyone who comes back is a real Act I person (name, role, wave, exit note). Money is held in "π0-seconds" (`pi0` = the profit rate snapshotted at Act III start), so the act scales with whatever the player built.
 
-- **Leak** `leak = ε · φ² · C`, with `ε = 0.9`, `C = I·(0.62 + 0.30·ai)` (cumulative humans cut). Onset is gentle (φ=0.17 → ~4 % of profit), the cliff arrives around `φ ≈ 0.5–0.6`.
-- **Demand Index** `Dm_real = 1 − leak/(1.2·E) + c`, where `c = 0.4 · creditShare`.
-- **Household Debt** `HD' = 0.5·c·1.2·E − 0.002·HD`; ratio `ρ = HD/(150·10⁶·250)`. **Minsky crisis** hazard `0.004·(ρ − 0.8)/0.2 /s` for `ρ > 0.8`; effect `HD×0.4`, slump ×0.4 for 300 s, MC −35 %. *Securitize* (action) converts `0.5·HD` into cash, delays hazard 10 min, Scandal +10.
-- **Synthetic customers ("Agents shopping")** are purchased as **racks**: `cost = 3·10⁷ · 1.12ⁿ`, yield `2·10⁵ · (0.3 + 1.4·synthShare)` demand-units/s, real upkeep `0.02·yield`. They add to **reported** revenue only (round-trip money): `π_rep = π_real + Σ rack yield`. Real cash comes from **At-the-Market Offering**: `+2·10⁻⁵ · MC_rep` per second until dilution 40 %. *This is the Closed Loop: reported revenue finances real compute that creates reported revenue.*
-- **Demand-Strategy triangle** (control): normalised weights `(retainShare, creditShare, synthShare)`; `retainShare` reduces `C` by `0.5·retainShare·C` (humans kept on payroll beyond need) at their wage cost — the "Humane" corner; the player discovers there is no corner that dominates.
-- **ORC antitrust gate** at `φ ≥ 0.5`: acquisitions blocked until *Regulatory Capture* (Slides 4,000 + a lump sum equal to ~6 min of π).
-- **Multiple expansion** `m_rep = 20 + 400·max(0, Λc − 0.5)² / (1.0001 − Λc)` with `Λc = synth/(real+synth)`: as the loop closes the valuation visibly goes **to ∞** (the formatter shows `∞` — the gag).
-- **Act III end:** `Λc ≥ 0.9` **and** humans in your holdings `≤ 5 %` of peak **and** *The Last Customer* event watched.
+- **Demand.** `dmTarget = DM0 + (1 − DM0)(1 − exp(−reffE/RS))`, `reffE = Σ rehire effects`, each `DEPT3[dept].dm · (0.7 + 0.3·c)`. The displayed `dm` is lagged (`TAU_UP` 10 s up, `TAU_DN` 18 s down) and starts at 1 so the act always opens with a visible stall. `gross = base·dm + store`; `π = gross·slump·hal − upkeep − interest − pay3`; `pay3 = rwRaw · PAY · pi0` is the contractor bill (3× the old wage).
+- **Retainer** (cash price of one rehire): `RET0 · pi0 · RET_G^reh · (0.6 + 0.4w) · (1 + GRUDGE·grudge)`, where `grudge = clamp(waveSize / GRUDGE_N)` is how big the wave was that cut them (people who left on their own have `grudge = 0`). *Act I cruelty is paid for here.*
+- **Board confidence** `conf ∈ [0,1]`. Each rehire costs `PEN · bp` (`bp` per department; ×0.7 with *Flexible Headcount*). It recovers to 1 with τ 100 s (55 s with *Investor Relations*). The reported multiple is `mTot0 · (0.45 + 0.55·conf)`, so the share price visibly drops with each rehire.
+- **Board Intervention.** If `conf < 0.35` the Board re-cuts the newest 3 rehires: they are flagged `F_TWICE`, go into a new wave, `conf` resets to 0.7, `interv++`. Never run offline. The player is never hard-blocked from a rehire: the cards show cost, effect and a warning; the batch buttons stop at a SAFE line (`conf ≥ 0.4`) and always say why they stopped.
+- **Frozen mechanics.** Integration (U→I), reckonings, the firesale, Bids and all earlier-act initiatives are off or hidden in Act III. `humans += reh · COHORT · E`.
+- **Finale.** The first person ever cut (`pickFirst()`: earliest-cut person still out; reserved, cannot be rehired in a batch) is rehired last, as **Head of Efficiency**. Requires `flags.stall` (`dm < 0.5` seen, or 90 s elapsed), `dm ≥ 0.8` and cash ≥ `FIN_RET · pi0`. `FIN_WAIT` = 20 s later `startAct4` runs.
+- **Entry grant.** `cash = max(cash, 45 · pi0)` so the first rehires are never a wall.
+- **Per-person records.** `cutT[]`, `cutW[]`, `waves[]`, `lastCutT`, `first`. A wave opens per `wave()` call or per solo cut after > 8 s of quiet. Saves older than v4 get reconstructed records (deterministic).
+- **Act IV verdict.** `cruelty()` ∈ [0,1] = 0.32·min(1, cuts/700) + 0.22 (waves ≥ 10) + 0.16 incidents + 0.10 lawsuits + 0.10 interventions + 0.10 scandal. Bands `< 0.30` retained, `< 0.62` eliminated with an appeal available, else eliminated and the appeal is denied. Stance shifts the number by −0.04 (agree) or +0.03 (question). Both endings remain reachable in every band (Ending A is always one click away; Ending B needs a band ≤ 1).
 
 ### 4.9 Safety nets (anti-softlock) and the **max-dead-time rule**
 
@@ -344,7 +345,7 @@ Targets are **greedy-bot time** (perfect attention, one decision per second, use
 |---|---|---|---|---|---|---|
 | I | **Right-Sizing** | *choose & cut* | 0:00–0:37 | 0:00–0:50 | Spreadsheet + dot grid | H ≤ 520 and *Synergy Memo* bought |
 | II | **Synergy** | *acquire, integrate, leverage* | 0:37–1:17 | 0:50–1:45 | "Paper" → forced SaaS dashboard; portfolio treemap | `E ≥ 25·10⁶` after *The Correction* |
-| III | **The Closed Loop** | *balance demand* | 1:17–1:52 | 1:45–2:30 | Market field (canvas) + triangle control | Closure ≥ 90 %, humans ≤ 5 %, *Last Customer* |
+| III | **The Rehire** | *bring them back, one by one* | 1:17–1:45 | 1:45–2:25 | Floor with rings (the people you cut) + Re-engagement Desk | Demand ≥ 80 %, Head of Efficiency rehired |
 | IV | **The Last Position** | *redundancy review* | 1:52–2:02 | 2:30–2:45 | The UI dismantles itself | Ending A or B |
 
 New-system cadence: one significant new system every **7–10 minutes** (Reddit lesson, §1.4), never two at once.
@@ -442,49 +443,37 @@ New-system cadence: one significant new system every **7–10 minutes** (Reddit 
 
 **Act II decision space.** (1) *What to buy* — targets differ in size, "fat" (cuttable share), keepers density, and a **Culture** tag affecting morale shock (e.g., "Family-owned" doubles Scandal per cut — comedic risk). (2) *How hard to integrate* — an **Integration Intensity** slider (0.5–2.0) multiplies RC but multiplies Scandal rate by intensity² and incident chance by intensity. (3) *How much to lever.* (4) *How much to lie* (honest ≈ +0 %, full add-backs ≈ −15 % time but exposes Reckoning). **Check:** the bot (§14) must show *honest*, *moderate*, and *max-fiction* strategies within ±25 % of each other in time-to-Act-III while differing in risk (otherwise the lie has no cost or no benefit).
 
-### 5.3 Act III — The Closed Loop (≈ 35 min bot / 45 human) [provisional]
+### 5.3 Act III — The Rehire (≈ 20–30 min bot / 25–35 human) [calibrated]
 
-**Fantasy.** You own enough of the economy that *you are the market*.
+**Fantasy.** The Stall: nobody is buying, nobody is building. The only fix is the thing you spent 40 minutes undoing.
 
-**Screen change.** The treemap becomes a **Market Field**: a low-res canvas of ~10,000 cells; each cell is a household; warm amber = real purchasing power, grey = exhausted, **electric blue = synthetic customer**. Gauges: **Demand Index** (real vs reported), **Household Debt**, **Closure %**. Control: the **Demand-Strategy triangle** (a draggable point; three labelled corners — *Wages (Retain)*, *Credit (Buy-Now-Pay-Later)*, *Synthetic (Agents)*).
+**Screen.** The Floor returns as the *Re-engagement view*: hollow rings are everyone you let go (hover or tap for name, role, exit note), a gold double ring marks the first person you ever cut, red rings mark people the Board re-cut. Filled accent dots are rehires. Above it, a **goal card** ("Demand back to 50 % / 80 % / offer the Head of Efficiency role") and two bars: **Demand** (with the 80 % mandate tick and today's target) and **Board confidence** (with the 35 % intervention line). Below: the **Re-engagement Desk** (search, department, sort by value/demand/retainer/board/wave; each row shows +Demand, −Board, retainer; batch **Best 5/10/25** after *Alumni Network*).
 
 **Beats**
 
 | t (in Act) | Beat |
 |---|---|
-| 0:00 | ORC: *"Systemic Importance."* **Demand Index** appears; Hollis notices Revenue-per-customer is *falling*: **leak** is introduced with a one-line explanation + a worked example (*"Dale's wage → Dale's spending → our revenue. We fired Dale."*). |
-| 3:00 | *Buy-Now-Pay-Later* (credit slider); **Household Debt** gauge. |
-| 6–10 | Real profit peaks (≈ φ 0.6). Racks (Synthetic Customers) become buyable: first **blue cells** appear on the field. |
-| 12 | **Securitization desk**. First Minsky warning (soft crisis at ρ > 0.8 if untreated). |
-| 15 | **Regulatory Capture** gate at φ = 0.5 (if the player rushed consolidation). |
-| 20 | Closure ≥ 50 %: the multiple `m_rep` begins its hyperbolic rise (counter flickers). |
-| 28 | Closure ≥ 80 %: **Last Customer** — a scripted event: one amber cell flashes, then turns blue. "*All customers are now Colleagues.*" |
-| 33–35 | Closure ≥ 90 %, humans ≤ 5 % → Act IV |
+| 0:00 | ORC mail, the stall, entry grant; goal "Demand back to 20 %…" |
+| 0–4 | First rehire (log + mail); the dots canvas shows an arrival ring |
+| 4–10 | Demand milestones (mandates 1–3); the Board gets nervous; first Board Intervention is possible for greedy play |
+| 10–22 | *Alumni Network*, *Flexible Headcount*, *Investor Relations*, *Contractor Storefront* unlock; contractors' retainer grows `RET_G` per rehire; cruelty (grudge) makes Act I's big waves the most expensive people to get back |
+| 18–28 | Demand ≥ 80 % → "The Head of Efficiency" card unlocks (needs `stall` + cash) |
+| end | The first person cut accepts; 20 s later Act IV starts |
 
-**Act III initiatives** (provisional)
+**Act III initiatives** (4, gate `a3`): Alumni Network (batch rehire), Flexible Headcount (−30 % Board penalty), Contractor Storefront (adds a demand floor), Investor Relations (Board recovery τ 55 s).
 
-| ID | Name | Slides | Cash | Effect |
-|---|---|---|---|---|
-| III-01 | Demand Strategy | — | — | unlocks triangle (free on entry) |
-| III-02 | Buy-Now-Pay-Later | 2,000 | 5·10⁹ | credit slider (0–0.4) |
-| III-03 | Securitization Desk | 3,000 | 2·10¹⁰ | action: sell `0.5·HD` |
-| III-04 | Synthetic Customers | 3,500 | 1·10¹⁰ | rack tier 1 |
-| III-05 | Synthetic Households | 6,000 | 1·10¹² | rack tier 2 (×100 yield; cost `3e9·1.13ⁿ`) |
-| III-06 | At-the-Market Offering | 4,000 | 0 | equity issuance |
-| III-07 | Regulatory Capture | 4,000 | ≈ 6 min π | removes ORC gate |
-| III-08 | Engagement Agents | 8,000 | 5·10¹¹ | rack yield ×2 ("customers that always agree") |
-
-**Design checks.** (1) With *only* credit, `HD` crisis occurs ≈ minute 20; with *only* synthetic, Closure is slower but safe for real cash only if the ATM offering is bought; with *only* retain, Closure never completes — each pure strategy loses; the best play is a *shifting mix* (tested). (2) The bot's *real-profit peak then decline* is intentional and surfaced to the player by the Reality Lens ("we are optimizing a number that no longer exists").
+**Design checks.** (1) *Spam* (aggressive bot: ignore the Board) is net-negative: ~30 interventions, longest run. (2) *Patient* play (greedy) never triggers an intervention and finishes in 22–25 min. (3) Max dead-gap in Act III ≤ 0.5 min for every bot (`tests/rehire.test.ts`, `tools/deadtime.ts`). (4) Reckonings are disabled in Act III (no E loss).
 
 ### 5.4 Act IV — The Last Position (≈ 10 min bot / 15 human)
 
 Scripted; very little numeric play. The UI **dismantles itself** (T7). Beats:
 
+0. *Reviewer.* The review is run by **Head of Efficiency** — the person you cut first in Act I (name, role and exit note taken from the save). Step 4 is their **verdict** on the player, built from `cruelty()` (§4.8).
 1. *Redundancy Review of the Board.* A single action: hold **Run Analysis** (15 s). Hollis replies with three buttons (tone options: *Agree · Question · Resign*; only flavor/ending lines).
 2. *Review of the Street* (the analysts replaced by a "Sentiment API").
 3. *Review of Hollis* (he asks to go last; the player may agree — flavor).
 4. *Review of Dale.* The CEO's last email is the funniest and saddest of the game.
-5. *Review of **Employee #1000 — the player's badge**.* Choose: **(A) Eliminate** → *Ending A "Efficient"*; **(B) Retain**, "for brand reasons" → *Ending B "Heritage Human"* (a single dot remains on a blank field).
+5. *Review of **Employee #1000 — the player's badge**.* The reviewer reads the file aloud (cuts, waves ≥ 10, incidents, interventions) and gives the verdict band. Choose: **(A) Accept the elimination / decline the retention** → *Ending A "Efficient"*; **(B) Accept the retention or appeal** (bands 0–1; denied in band 2), "for brand reasons" → *Ending B "Heritage Human"* (a single dot remains on a blank field).
 6. *Review of **Efficiency Initiative v1.0** (you).* A big button: **Sunset This Program**. UI shrinks to a single white document with the **Exit Interview** (NPS slider 0–10) and the player's **Performance Review** (T8). Credits as a severance letter.
 
 Time here is mostly reading; the player can skip lines with Space/tap. Ending text is in §7.
@@ -497,7 +486,7 @@ Each twist lists **Trigger → Implementation → Accessibility fallback**. Glob
 
 ### T1 — The shrinking number (the genre inverted)
 - **Trigger:** from the first cut.
-- **Implementation:** *Headcount* is the left-column hero with a *down* arrow; **Market Cap** is the top hero. The **Jaws chart** (canvas): two lines on a shared normalised log axis (MC ↑ gold, Humans-% ↘ ink) with the area between filled; named "**The Alligator**" in the UI (the real corporate-chart nickname). Act-boundary annotations are drawn into the chart ("Q3", "Synergy", "Correction", "Last Customer"). At the end, the jaws are fully open.
+- **Implementation:** *Headcount* is the left-column hero with a *down* arrow; **Market Cap** is the top hero. The **Jaws chart** (canvas): two lines on a shared normalised log axis (MC ↑ gold, Humans-% ↘ ink) with the area between filled; named "**The Alligator**" in the UI (the real corporate-chart nickname). Act-boundary annotations are drawn into the chart ("Q3", "Synergy", "Correction", "The Stall"). At the end, the jaws are fully open.
 - **A11y:** the chart has a text summary (`aria-label` + visible *Show data* table of the last 12 quarters); all numbers are DOM text.
 
 ### T2 — Boomerang consultants (and Scope Creep)
@@ -528,10 +517,10 @@ Each twist lists **Trigger → Implementation → Accessibility fallback**. Glob
 - **Implementation:** the hero Market Cap is **Reported**; a faint superscript `†` follows it. Holding **R** (or the on-screen **Reality Lens** toggle) swaps the entire HUD to **Real** values with a desaturated "x-ray" style and a subtle jitter (reduced-motion: no jitter). The hero's tooltip *always* states "Reported". In the Jaws chart a thin dashed line shows **Real** value; the gap is shaded "**Fiction**". Audit Seasons use the same lens. During Act III the lens also reveals that most *customers* are blue.
 - **A11y:** a toggle (not a hold) is available; both numbers are also listed in a **Reality table** in the Capital tab; screen readers get "Reported 4.2 billion, real 3.1 billion".
 
-### T6 — The Closed Loop (the mechanic is the punchline)
+### T6 — The Rehire (the cost of the cuts comes back as a bill)
 - **Trigger:** Act III start. See §4.8.
-- **Implementation:** the **Market Field** canvas (cells amber → blue as synthetic customers replace real ones), a **triangle control** (pointer drag + keyboard: arrow keys move in 1 % steps; three numeric inputs also exposed), gauges for Demand/Debt/Closure. The **Last Customer** beat is scripted (one cell flashes).
-- **A11y:** the triangle has a three-slider alternate; the field exposes a textual summary and a Closure % bar; no information is only color (amber vs blue also differ by cell *pattern*: dot vs plus).
+- **Implementation:** the Floor canvas in re-engagement mode (rings for the cut, filled dots for the rehired, gold ring for the first person cut), Demand and Board meters, the Re-engagement Desk. The first person ever cut becomes the Head of Efficiency and reviews you in Act IV; the verdict reflects Act I.
+- **A11y:** every ring has a text equivalent in the Desk (a searchable list); the meters are text-labelled bars; hover cards are also tap/focus cards; no information is only color (rings differ by shape: hollow, double, dashed).
 
 ### T7 — The game makes *you* redundant
 - **Trigger:** Act IV, the last review.
@@ -615,7 +604,7 @@ All text/background pairs ≥ **4.5:1** (≥ 3:1 for large text and graphical ob
 ### 8.4 The three signature canvases
 1. **The Floor (Act I).** 40×25 grid of rounded squares (cell 18–24 px, scaled by DPR). State encoding: *fill* = department; *opacity* = estimated contribution (after audit); *outline* = keeper (after Bus Factor); *hollow ring* = contractor; *dashed* = player badge. Cuts: 400 ms fade + 8 px drift upward to the **"Opportunities"** strip at the bottom of the canvas (a lane of faint ghosts that grows—persistent memory of the cuts; the strip is **Act IV's last visual**). Hover/focus: a card with name, role, tenure, wage, audit-estimated contribution bar (with noise band). Multi-select by drag (lasso) or by **Wave Planner** (rule builder: dept × bottom-N% × min-payback).
 2. **The Portfolio (Act II).** Squarified **treemap** (own implementation, ~60 lines), animated tile growth; each tile shows name, size, integration ring, and a "humans" dot-density texture. Selected tile → details drawer (price, fat %, keepers density, culture tag).
-3. **The Market Field (Act III).** 100×100 low-res canvas (cells 6 px), `ImageData` updated at 10 Hz; cells transition amber → grey → blue. The **Jaws chart** (all acts) is a separate small canvas (or SVG) with hover crosshair.
+3. **The Floor, re-engagement view (Act III).** The Act I dot canvas is reused: hollow rings (cut), gold double ring (first cut), red ring (Board re-cut), filled dots (rehired) with arrival-ring ghosts. The **Jaws chart** (all acts) is a separate small canvas (or SVG) with hover crosshair.
 Frame budget: **canvas redraws only on state change or hover**; the Jaws chart updates at 1 Hz; target ≥ 55 fps on a 2019 mid laptop, ≥ 30 fps on mid phones; the loop sleeps when `document.hidden`.
 
 ### 8.5 Motion & micro-interactions
@@ -636,7 +625,7 @@ Semantic landmarks (`header`, `main`, `nav`, `aside`); every control reachable b
 No audio files. A tiny `AudioEngine` with `OscillatorNode`, `GainNode`, `BiquadFilter`, noise `AudioBuffer` built at runtime. **Default: off**, with a first-run prompt *"Enable sound? We recommend yes. It will not affect your performance review."* (no autoplay before user gesture; respects `prefers-reduced-motion` only for UI, not audio).
 - **Act I:** a soft **keyboard-clack** synth (filtered noise bursts) on cuts; **"ding"** on Inbox email; pitch rises slightly with Profit/s (musical scale: pentatonic) — *call and response* feedback (Lantz).
 - **Act II:** **elevator-music** generated from a 4-chord loop (sine+triangle, lowpass) that plays on "Hold" moments (Statement Builder waits, the Digital Transformation modal). The Audit Season uses a tense pedal tone.
-- **Act III:** slow generative drone; each synthetic customer adds a faint sine partial (the field *audibly* becomes a chord). *Last Customer* = a single bell.
+- **Act III:** (not implemented) a drone that gains a faint partial per rehire; the Head of Efficiency accepting = a single bell.
 - **Act IV:** silence; a printer-like noise burst on each elimination; last sound is a single "send" whoosh. Optional volume sliders: Master/SFX/Music.
 - Budget: < 8 KB of audio code; all sounds < 400 ms except the loops; CPU < 3 % on a laptop. Mute when tab hidden.
 
@@ -656,7 +645,7 @@ No audio files. A tiny `AudioEngine` with `OscillatorNode`, `GainNode`, `BiquadF
 - **Offline progress policy ("Out of Office")**
   - On load, `elapsed = now − savedAt` (clamped ≥ 0 to resist clock skew; if the clock jumps *backwards* by > 5 min, no offline gain and a log joke).
   - Simulated in coarse steps (1 s steps for ≤ 2 h, 10 s steps beyond) at **50 % efficiency**, **cap 8 h** (shown, adjustable down in settings).
-  - Offline sim **never triggers** Incidents, Class actions, Audit Seasons, Minsky crises, Reckonings, Corrections, or Act transitions; it only accrues Cash, Slides, attrition, CIP *safe* cuts (when the CIP safeguards hold) and integration progress, and **queues any hazard** that *would* have happened as a *warning email* ("Audit Season postponed until you return.").
+  - Offline sim **never triggers** Incidents, Class actions, Audit Seasons, Board Interventions, Reckonings, Corrections, or Act transitions; it only accrues Cash, Slides, attrition, CIP *safe* cuts (when the CIP safeguards hold) and integration progress, and **queues any hazard** that *would* have happened as a *warning email* ("Audit Season postponed until you return.").
   - Return screen: an **email from IT** "Out of Office report" with a table (+Cash, +Slides, cuts, "Productivity: unaffected. We flagged this."), and an *Accept / Review* button; sim runs in a Web Worker chunk to avoid freezing the UI (progress bar).
 - **Multi-tab guard:** `BroadcastChannel` heartbeat; a second tab shows "Another session is working here. Take over?" to avoid corrupted overwrite.
 - **Privacy:** no network calls (no analytics, no fonts, no CDNs). A statement in the footer and README.
@@ -730,7 +719,7 @@ The engine is DOM-free and deterministic (P9), so a **bot** drives it through th
 **Bot policies**
 | Bot | Policy | Purpose |
 |---|---|---|
-| **Greedy** (reference) | Ground-truth info; each second: buy by best ROI (`Δrate / cost`, with payback ≤ 600 s for generators, always buy "unlock" initiatives), cut when `net_i > 0.05 ∧ payback < 600 s ∧ M > 0.7 ∧ X < 75`; Guidance *In-line*; Statement Builder best card; Audit → *Lunch*; Act II: configurable add-back level; Act III: triangle follows a scheduled mix keyed to `Dm` and `ρ_HD`. Prototype scripts in `tools/calib_act*.py` are the spec of this bot. | pacing and thresholds |
+| **Greedy** (reference) | Ground-truth info; each second: buy by best ROI (`Δrate / cost`, with payback ≤ 600 s for generators, always buy "unlock" initiatives), cut when `net_i > 0.05 ∧ payback < 600 s ∧ M > 0.7 ∧ X < 75`; Guidance *In-line*; Statement Builder best card; Audit → *Lunch*; Act II: configurable add-back level; Act III: rehires best value first while keeping Board confidence above a floor (`tools/bot.ts`, `act3()`); aggressive ignores the Board; lazy uses the batch only. | pacing and thresholds |
 | **Lazy** | Acts every 60 s; only sees *noisy* contribution (`σ_n` of the player's current audit level); picks the cheapest cuts; ignores Guidance, Statement Builder, Securitization; takes 30 % wrong actions (cuts keepers). | upper bound on duration; "can a casual player finish?" |
 | **Honest / Moderate / Max-Fiction** | Greedy variants with add-back level 0 / ≤ 2 / 4. | strategy parity (§5.2) |
 | **Idle** | Takes no actions after t=0. | soft-lock check: the game must not crash, must offer advisor emails, Bridge Loan keeps cash ≥ 0, must reach "stuck but alive" state with a clear next-goal bar. |
@@ -747,7 +736,7 @@ The engine is DOM-free and deterministic (P9), so a **bot** drives it through th
 | **Max dead time** | Greedy: ≤ **90 s** in Act I, ≤ **120 s** in II–III; `p95(time-to-next-affordable-meaningful)` ≤ **60 s**; Lazy ≤ 2× those |
 | Engagement beats ignoring | For each optional mechanic *M* (Guidance, Statement Builder, Rainy-Day Fund, Securitization, Hot-Desking, Wellness, Legal Hold, Integration Intensity): bot **with** *M* is ≥ **10 %** faster to the next Act, **or** has ≥ 30 % fewer Incidents/Crises, than the bot **without** (author's patch-2 lesson, §1.3) |
 | Strategy parity (Act II) | Honest, Moderate, Max-Fiction finish within **±25 %** of each other; Max-Fiction is **10–25 % faster** *and* has ≥ 25 % chance of ≥ 1 Reckoning |
-| Pure strategies (Act III) | *Only-Retain*, *Only-Credit*, *Only-Synthetic* each **fail** (no Closure within 180 min, or ≥ 2 Minsky crises, or negative real cash > 5 min); the scheduled-mix Greedy passes |
+| Pure strategies (Act III) | *Spam* (aggressive, ignores the Board) racks up ~30 Board Interventions and the longest act; *patient* (greedy) none; every bot reaches Act IV, books never break (`tests/rehire.test.ts`) |
 | Interior optimum (Act I) | Static check `tools/opt_check.py` ported to TS: optimum H within ±15 % of 457 at M = 0.85; profit at H = 100 < 75 % of optimum |
 | Soft-lock | Idle bot: no NaN/∞ (except the *intended* `∞` display), cash ≥ 0, Act advances impossible without actions but Next-Goal bar non-empty |
 | Determinism | same `(seed, policy)` ⇒ identical state hash at 10/30/60/120 min across Node versions in CI |
@@ -758,7 +747,7 @@ The engine is DOM-free and deterministic (P9), so a **bot** drives it through th
 
 ### 14.2 Playwright (UI) — `tests/e2e`
 - **Smoke:** loads; zero console errors; **zero non-same-origin requests** (asserted via `page.on('request')`).
-- **Act flows** (with `?jump=` + `?debug=1&speed=64` to save time): Act I dot cut by pointer, by keyboard (Directory table), Wave Planner; Initiative purchase; save → reload → state equal; export/import round-trip; offline simulation by mocking `Date` +3 h; Earnings Call; Act I→II transition; Act II tile bid; Statement Builder solves; Audit Season choices; The Correction; Act III triangle by keyboard; Last Customer; Act IV → Ending A / Ending B.
+- **Act flows** (with `?jump=` + `?debug=1&speed=64` to save time): Act I dot cut by pointer, by keyboard (Directory table), Wave Planner; Initiative purchase; save → reload → state equal; export/import round-trip; offline simulation by mocking `Date` +3 h; Earnings Call; Act I→II transition; Act II tile bid; Statement Builder solves; Audit Season choices; The Correction; Act III rehire from the Desk and from a ring card, batch, Head of Efficiency; Act IV → Ending A / Ending B.
 - **Twists:** T3 classes toggle at thresholds; **Stable UI** disables them; T4 redesign applies, **Revert to Classic** works and the *tab order is unchanged*; T5 `R` toggles; T7 dismantle completes in both modes; T8 emails appear and **no** `beforeunload` handler / `Notification.requestPermission` call exists (assert by spying).
 - **Responsive:** 390×844, 768×1024, 1440×900, 1920×1080; no horizontal overflow; touch targets ≥ 44 px; bottom tab bar on mobile.
 - **A11y:** `@axe-core/playwright` on every act + modal; zero serious/critical; `prefers-reduced-motion` emulation; keyboard-only completion of the Act I tutorial; screen-reader smoke list (manual in M10).
@@ -789,7 +778,7 @@ Order is **foundations → content → polish → playtest loops → release**. 
 | **M4** | **Act I content & polish + Playtest Loop 1** | M | name/role/goodbye generators (60 + compositional), 45 Act I lines×, emails (Dale/Hollis/IT), T3 decay, T2 (rehire/scope creep), Earnings Call UI, Statement-free tutorial emails, save UX, Settings (Stable UI etc.) | Loop 1 exit gate; tone review pass (§3.4) signed off; Act I playable end-to-end by a stranger without help (≥ 4/5 testers) |
 | **M5** | **Act II model + UI** | L | aggregate model, targets generator, treemap, tiers, debt, add-backs/Fiction, audits, Statement Builder, Correction; bot variants | Parity table (§5.2/§14.1) passes; Act II greedy **33–47 min**; dead-time ≤ 120 s; treemap fps OK |
 | **M6** | **Act II twists + Playtest Loop 2** | M | **T4 redesign**, **T5 Reality Lens**, AI-Colleagues/hallucination, content (emails/headlines/tiles), Act II audio | T4 revert works; tab order unchanged (test); T5 toggle accessible; Loop 2 exit gate |
-| **M7** | **Act III model + UI + calibration** | L | leak, credit/HD/Minsky, racks, ATM offering, triangle (pointer+keyboard+sliders), ORC gate, Closure; Market Field canvas; Last Customer; Act III audio | Pure-strategy tests **fail** as required; Greedy-mix passes in **28–42 min**; Loop 3 exit gate |
+| **M7** | **Act III model + UI + calibration** | L | demand/Board model, rehire Desk, intervention, finale, per-person exit records, v4 migration | Greedy 22–25 min, aggressive 25–31, clicky ~20, lazy ~27; max gap ≤ 0.5 min |
 | **M8** | **Act IV, endings, Case Files** | M | Redundancy Review, T7 dismantle (+ Stable UI path), T8 reviews/final review, Ending A/B, Billable Hours, Playbook cards, Case Files 1–5 (data), meta save | Playwright reaches both endings; Case File runs 45–60 min by Greedy; meta persists across reset |
 | **M9** | **Full-run balance loop + Playtest Loop 4** | M | Monte-Carlo (200 seeds), Lazy bot tuning, pity timers, text pass | Total Greedy **95–125 min**, Lazy ≤ 180; CV ≤ 8 %; human full run 2h10–2h50 median; delight mean ≥ 4 |
 | **M10** | **Polish & accessibility** | M | audio pass, mobile pass, reduced-motion/Stable UI parity, manual screen-reader pass (NVDA/VoiceOver), performance & bundle, French string extraction (keys complete), writing polish | axe zero serious/critical; Lighthouse budgets met; bundle ≤ 150 KB gz; **Loop 5** exit gate |
@@ -825,8 +814,8 @@ Order is **foundations → content → polish → playtest loops → release**. 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | **Tone misfires** (layoff = real pain) | M | H | §3.4 guardrails; every string reviewed; humane details in goodbyes; endings carry empathy (Ending B, Dale's last email); optional "Hide meta-commentary"; keep Case File vignettes to inconveniences (delays, lost bags), never injury. |
-| **Act III balance** (new system, provisional) | H | H | M7 is its own milestone with pure-strategy tests; knobs (`ε`, rack yield, HD thresholds) isolated in data; fallback: shorten to a 20-min scripted/guided Act III. |
-| **Scope** (4 acts, 3 canvases, 8 twists) | M | H | foundations first; cut order if late: Case Files 3–5 → T3 minor departments → Act III Market Field fidelity (fall back to bars) → audio. The core vertical slice (Acts I–II + ending stub) ships first. |
+| **Act III balance** (rewritten as The Rehire) | M | H | knobs (`DM0`, `RS`, `PEN`, `RET_G`, `SAFE`) isolated in `A3`; `tests/rehire.test.ts` covers spam, patience, max gap and the verdict bands. |
+| **Scope** (4 acts, 3 canvases, 8 twists) | M | H | foundations first; cut order if late: Case Files 3–5 → T3 minor departments → Act III Floor-ring polish (fall back to the Desk list) → audio. The core vertical slice (Acts I–II + ending stub) ships first. |
 | **UI gags harm accessibility/usability** | M | H | Stable UI parity; gags never alter DOM order/targets; Playwright asserts tab-order invariance; reduced-motion default. |
 | **Idle waiting returns** (the original's flaw) | M | H | dead-time rule enforced in CI; Next-Goal bar; Advisor emails; pity timers. |
 | **Canvas perf on phones** | M | M | redraw-on-change, cell batching with `ImageData`, DPR clamp 2, fall back to DOM table (Directory) automatically if fps < 24 for 5 s. |
@@ -882,8 +871,8 @@ Order is **foundations → content → polish → playtest loops → release**. 
 | Trust as human gating | **None.** Humans are the *resource that goes down*; Scandal/ORC/Board are *risk meters*, not gates |
 | Ops/Creativity as research currency | **Slides** produced by managers/consultants (cutting them has a cost) |
 | Strategy tournaments / quantum minigame | **Statement Builder** (match mood to cards) — explainable in one sentence |
-| Drone slider | **Demand-Strategy triangle** |
-| Stage-3 value drift battle | **Minsky crisis + the Closed Loop** economic risk |
+| Drone slider | **Re-engagement Desk** |
+| Stage-3 value drift battle | **The Rehire**: demand vs Board confidence |
 | Prestige: new universe | **Case Files**: new *company archetypes* with different puzzles |
 Review rule: any PR adding a mechanic must state "which genre trope this is and why it isn't a Paperclips clone".
 
@@ -891,16 +880,16 @@ Review rule: any PR adding a mechanic must state "which genre trope this is and 
 
 | Content | Count | Notes |
 |---|---|---|
-| Initiatives | Act I 18 · Act II 22 · Act III 8 · Act IV 0 | all in `data/initiatives.ts` |
+| Initiatives | Act I 18 · Act II 22 · Act III 4 · Act IV 0 | all in `data/initiatives.ts` |
 | Generators | QVO Associates, QVO Partners, RC tiers ×4, Racks ×2 | cost curves §4 |
 | Emails (scripted) | ~25 (Dale, Hollis, IT, ORC, QVO, Auditors) | + advisor templates 12 |
 | Log/headline one-liners | ~140 | seeded no-repeat |
 | Dot identities | compositional (first × last × role × quirk) | ≥ 60 distinct goodbye patterns |
-| Incident/event vignettes | 18 | Gary, class action, hallucination, whistleblower, Correction, Minsky, Last Customer… |
+| Incident/event vignettes | 18 | Gary, class action, hallucination, whistleblower, Correction, Board Intervention… |
 | Statement Builder cards | 12 (4 moods × 3 rows) + 12 joke alternates | |
 | Case Files | 5 | 1 default + 4 unlockables |
 | Playbook cards | 9 | |
-| Canvases | Floor, Portfolio, Market Field, Jaws chart | |
+| Canvases | Floor (Acts I and III), Portfolio, Jaws chart | |
 | Twists | T1–T8 | §6 |
 
 *End of document.*
