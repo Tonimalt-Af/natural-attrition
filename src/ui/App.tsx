@@ -5,7 +5,7 @@ import { clock, int, money, num, pct, usd } from '../engine/format.ts';
 import { t, mailText } from '../i18n/index.ts';
 import { G, act, continueGame, notify, saveNow, startNew, useGame } from './store.ts';
 import { Field, Floor, Jaws, Portfolio } from './stage.tsx';
-import { Capital, Debug, Directory, Initiatives, Inbox, LogView, Settings, Targets, Vitals, WavePlanner } from './panels.tsx';
+import { Capital, Debug, Directory, Initiatives, Inbox, LogView, Settings, Ticker, Targets, Vitals, WavePlanner } from './panels.tsx';
 import { LOG, MAIL } from '../i18n/en.ts';
 
 function Welcome() {
@@ -177,6 +177,7 @@ export function App() {
     <div class={'app' + (g.lens && s.act >= 2 ? ' lens' : '')} data-pane={g.tab}>
       <a class="skip" href="#main">{t('skip')}</a>
       <Hero />
+      <Ticker />
       <div class="grid" id="main">
         <div class="col-l"><Vitals /><WavePlanner /></div>
         <div class="col-c"><Stage /></div>

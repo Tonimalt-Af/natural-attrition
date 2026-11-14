@@ -67,7 +67,7 @@ function twists() {
 export function saveNow(rotate = false) { if (!G.started) return; save(kv, G.s, rotate); }
 export function startNew(name: string, opt: Record<string, number> = {}) {
   G.s = initState(Number(params.get('seed')) || (Date.now() & 0xffffff), name.trim().slice(0, 24) || 'Alex', opt);
-  G.started = true; G.tab = 'floor'; afterLoad(); saveNow(true);
+  S.log(G.s, 'start'); G.started = true; G.tab = 'floor'; afterLoad(); saveNow(true);
 }
 export function continueGame(): boolean {
   const { res, restored } = load(kv);

@@ -34,20 +34,30 @@ Findings → changes
 - tab strip clipped "Settings" at wider text → tabs wrap.
 After fixes: 0 serious/critical axe violations on Acts I–IV (default and Stable), Tab reaches 25 distinct controls with a visible focus ring, `prefers-reduced-motion` auto-enables Stable UI, no console errors on either viewport.
 
-## Final pacing (minutes, headless bot, seeds 1–3)
+## Cycle 4 – fresh-eyes first-time-player run
+Method: played the live build in Playwright as a first-time player (no debug, 1280×800 and 390×844, ~10 real minutes, screenshot every ~90 s, `e2e/live10.mjs`), then debug-accelerated through the rest and re-read every act/twist/ending screenshot. (Tooling note: the sandbox pauses background processes between tool calls, so long timed runs must stay in one foreground call.)
+Findings → changes
+- **The jokes were invisible.** All the log writing lived in a hidden "Log" tab; a first-time player never saw a single cut line. → added a permanent **Ticker** under the header showing the newest log line (tone-coloured, fades in), plus a Day-1 opening line.
+- **Mobile Directory was unreadable** (name column clipped off-screen, horizontal scroll after tapping). → mobile layout drops Dept/Net columns, fixed column widths, full-width Transition buttons; no horizontal overflow at 390 px.
+- First minute: "Next goal" and the list both said *Nothing pending. We've checked.* back to back. → the goal card now tells you ideas arrive as Slides accumulate.
+- Dead time: the last ~9 min of Act I was just saving cash for the Synergy Memo. → memo cash 360k → 270k (Act I now 33–36 min).
+- Writing: eight Hollis "Observation" mails shared one subject and a repeated tic → distinct subjects, sharper bodies (demand, cash, exposure).
+- Verified unchanged/healthy: no console errors on either viewport over 10 min; Act II treemap + Alligator chart, redesign modal, Reality Lens, Market Field, Act IV document and both endings re-read; 0 axe violations; all UI flows pass.
+
+## Final pacing (minutes, headless bot, seeds 1–3, after Cycle 4)
 | mode | seed | Act I | Act II | Act III | Act IV | total |
 |---|---|---|---|---|---|---|
-| greedy | 1 | 36.2 | 39.4 | 32.6 | 8.0 | 116.2 |
-| greedy | 2 | 36.0 | 39.2 | 31.6 | 8.0 | 114.8 |
-| greedy | 3 | 37.7 | 42.5 | 30.8 | 8.0 | 119.0 |
-| lazy | 1 | 35.3 | 75.8 | 29.3 | 9.7 | 150.0 |
-| lazy | 2 | 33.8 | 76.5 | 30.8 | 9.7 | 150.8 |
-| lazy | 3 | 33.8 | 77.3 | 30.7 | 9.7 | 151.5 |
+| greedy | 1 | 33.8 | 36.9 | 31.4 | 8.0 | 110.2 |
+| greedy | 2 | 33.6 | 37.3 | 31.3 | 8.0 | 110.3 |
+| greedy | 3 | 35.8 | 41.3 | 32.5 | 8.0 | 117.6 |
+| lazy | 1 | 32.3 | 79.5 | 27.0 | 9.7 | 148.5 |
+| lazy | 2 | 31.5 | 77.3 | 30.0 | 9.7 | 148.5 |
+| lazy | 3 | 33.0 | 88.5 | 27.0 | 9.7 | 158.3 |
 
 Idle (never touches anything): the company keeps attriting and earning, no crash/NaN, never walled.
 
 ## Known issues / not done
-- The last ~9 min of Act I is mostly saving for the Synergy Memo (cuts and quarters keep you busy, but it is the flattest stretch).
+- Act I's last stretch (saving for the Synergy Memo) is still the flattest part; the bot's early purchases lag a human's, so real Act I may run a little shorter than the bot's 34–36 min.
 - Act III UI is less polished than I–II; Act IV is deliberately bare.
 - No sound, no French, no Case Files screen, no Konami easter egg (see README deviations).
 - Real-human pacing is unknown; only the bot and screenshot checks were available.

@@ -161,7 +161,7 @@ export function Initiatives() {
   if (s.act >= 3) RACKS.forEach((rk, i) => { if ((i === 0 && !s.own.synth1) || (i === 1 && !s.own.synth2)) return; gens.push(<div class="init gen" key={'rk' + i}><div class="init-h"><b>{t('init.rk' + i)}</b><span class="count">{s.racks[i]}</span></div><div class="muted small">{t('init.rk.d')}</div><div class="init-f"><span class="cost">{money(S.rackCost(s, i))}</span><button class="btn" disabled={s.cash < S.rackCost(s, i)} onClick={() => act((st) => S.buyGen(st, 'rack', i))}>{t('init.buy')}</button></div></div>); });
   return (
     <div class="inits">
-      <div class="goal card"><span class="muted small">{t('init.next')}</span>{next ? <><b>{initName(next.i.id)}</b><span>{t('init.afford')} <b>{eta(next.e)}</b></span></> : <span class="muted">{t('init.none')}</span>}</div>
+      <div class="goal card"><span class="muted small">{t('init.next')}</span>{next ? <><b>{initName(next.i.id)}</b><span>{t('init.afford')} <b>{eta(next.e)}</b></span></> : <span class="muted">{t('init.wait')}</span>}</div>
       {gens}
       {list.map((i) => <Card key={i.id} id={i.id} />)}
       {!list.length ? <div class="muted empty">{t('init.none')}</div> : null}
@@ -186,6 +186,13 @@ export function LogView({ n = 40 }: { n?: number }) {
   const g = useGame(); const s = g.s; const hr = g.dec[4] >= 1 && !g.opts.stable && !g.opts.reduced;
   const lines = s.log.slice(-n).reverse();
   return <div class="log" role="log" aria-live="polite" aria-relevant="additions">{lines.length ? lines.map((l, i) => <div key={l.t + l.k + i} class={'logline ' + (l.tone ?? '')}><span class="muted mono">{clock(l.t)}</span> <span class="memo">{logText(s, l, hr)}</span></div>) : <div class="muted empty">{t('log.empty')}</div>}</div>;
+}
+
+/** The newest log line, always visible: the jokes live here, not in a hidden tab. */
+export function Ticker() {
+  const g = useGame(); const s = g.s; const hr = g.dec[4] >= 1 && !g.opts.stable && !g.opts.reduced;
+  const l = s.log[s.log.length - 1]; if (!l) return null;
+  return <div class={'ticker ' + (l.tone ?? '')} role="status" aria-live="off"><span class="mono muted">{clock(l.t)}</span> <span key={l.t + l.k} class="tk">{logText(s, l, hr)}</span></div>;
 }
 
 // ---------- Capital ----------
