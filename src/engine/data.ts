@@ -134,5 +134,5 @@ export const G_BEAT = [0.5, 1, 2, 4];
 export const G_MISS = [1, 2, 4, 8];
 export const QUARTER = 300;
 export const OFFLINE_CAP = 8 * 3600;
-export const A4 = { ANALYSIS: 75, SUNSET: 90, STEPS: ['board', 'street', 'hollis', 'dale', 'badge', 'sunset'] };
+export const A4 = { ANALYSIS: 90, SUNSET: 120, STEPS: ['board', 'street', 'hollis', 'dale', 'badge', 'sunset'] };
 export const SAVE_VERSION = 2;

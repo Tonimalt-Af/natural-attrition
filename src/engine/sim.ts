@@ -25,8 +25,8 @@ export const rackCost = (s: State, i: number) => RACKS[i].mins * 60 * Math.max(s
 export const humansAlive = (s: State) => s.dn.reduce((a, b) => a + b, 0);
 
 export function mixNorm(s: State) {
-  const t = s.mix[0] + s.mix[1] + s.mix[2] || 1;
-  return [s.mix[0] / t, s.mix[1] / t, s.mix[2] / t];
+  const c = s.own.bnpl ? s.mix[1] : 0; const t = s.mix[0] + c + s.mix[2] || 1;
+  return [s.mix[0] / t, c / t, s.mix[2] / t];
 }
 
 export function derive(s: State): Derived {
@@ -42,7 +42,7 @@ export function derive(s: State): Derived {
   const phi = s.act === 1 ? 0 : E / A2.N0;
   const d = { ai, lights, retain, creditShare, synthShare, E, phi } as Partial<Derived>;
   d.levMax = levMax(s); d.abMax = abMax(s);
-  d.phiF = s.F / (Math.max(s.piS, 1) * DAYS_PER_YEAR);
+  d.phiF = s.F / (Math.max(s.piS, s.piBase * 0.25, 1) * DAYS_PER_YEAR);
   d.price = A2.P0 * (Math.max(E, 1000) / 1000) ** A2.P_EXP / (1 - Math.min(phi, 0.995)) ** (s.act >= 3 ? 1.0 : 0.5) * (s.opt.rolodex ? 0.95 : 1);
   const mTot0 = clamp(s.mBase + (s.act >= 2 ? 2 : 0) + 3 * ai + s.wash - s.S / 10, 4, 40) * s.mMul;
   d.mTot = mTot0;
@@ -153,11 +153,6 @@ export function cut(s: State, i: number): string {
   keeperLoss(s, i, false);
   if (s.cuts === 1 || s.cuts === 2 || s.cuts % 40 === 0) log(s, 'cut', { n: i }, 'cut');
   return '';
-}
-function removeVoluntary(s: State, i: number) {
-  kill(s, i); keeperLoss(s, i, true);
-  if (s.fl[i] & F_BADGE) return;
-  if (Math.random() < 0) return;
 }
 export function rehire(s: State, i: number): string {
   if (!s.own.consult) return 'locked';
@@ -305,7 +300,7 @@ function genTarget(s: State): Target {
   return { id: s.nextTarget++, name: targetName(r3, r4), size, cult: Math.floor(next(s) * CULTURES.length) };
 }
 function startAct2(s: State) {
-  s.act = 2; s.actT[1] = s.t;
+  s.act = 2; s.actT[0] = s.t;
   const H = humansAlive(s);
   s.I = 1000; s.U = 0;
   const kappa = A2.KAPPA + A2.KAPPA_AI * aiLevel(s);
@@ -316,11 +311,11 @@ function startAct2(s: State) {
   mail(s, 'a2_start'); log(s, 'act2', undefined, 'good');
 }
 function startAct3(s: State) {
-  s.act = 3; s.actT[2] = s.t;
+  s.act = 3; s.actT[1] = s.t;
   mail(s, 'a3_orc'); log(s, 'act3', undefined, 'good');
 }
 function startAct4(s: State) {
-  s.act = 4; s.actT[3] = s.t; s.a4 = { step: 0, prog: 0, running: false, tone: [], badge: '', nps: 7, sun: 0 };
+  s.act = 4; s.actT[2] = s.t; s.a4 = { step: 0, prog: 0, running: false, tone: [], badge: '', nps: 7, sun: 0 };
   mail(s, 'a4_start'); log(s, 'act4', undefined, 'good');
 }
 
@@ -392,7 +387,7 @@ export function a4Submit(s: State, nps: number) { if (s.act === 4 && s.a4.step =
 function histPush(s: State, d: Derived) {
   if (s.t - s.histAt < 10) return; s.histAt = s.t;
   s.peakH = Math.max(s.peakH, d.humans);
-  s.hist.push([Math.round(s.t), Math.log10(Math.max(d.mcRep, 1)), d.humans / Math.max(s.peakH, 1), Math.log10(Math.max(d.mcReal, 1))]);
+  s.hist.push([Math.round(s.t), Math.log10(Math.max(d.mcRep, 1e5)), d.humans / Math.max(s.peakH, 1), Math.log10(Math.max(d.mcReal, 1e5))]);
   if (s.hist.length > 700) { const h: number[][] = []; for (let i = 0; i < s.hist.length; i += 2) h.push(s.hist[i]); s.hist = h; }
 }
 function quarter(s: State, d: Derived) {
@@ -422,14 +417,15 @@ function advisor(s: State, d: Derived) {
   mailAny(s, 'advisor_' + key);
 }
 
-export function step(s: State, dt = TICK) {
+export function step(s: State, dt = TICK, off = false) {
   if (s.ended) return;
   s.t += dt;
   s.rev++;
   const d = derive(s);
   if (s.act === 4) { stepAct4(s, dt); return; }
   // economy
-  s.cash += d.pi * dt; s.slides += d.slidesRate * dt;
+  const eff = off ? 0.5 : 1;
+  s.cash += d.pi * dt * eff; s.slides += d.slidesRate * dt * eff;
   s.piS += (d.pi - s.piS) * (1 - Math.exp(-dt / 60));
   s.piRepS += (d.piRep - s.piRepS) * (1 - Math.exp(-dt / 60));
   if (s.act >= 2) s.piBase = Math.max(s.piBase, s.piS);
@@ -437,23 +433,25 @@ export function step(s: State, dt = TICK) {
   s.mMul += (1 - s.mMul) * (dt / 600);
   s.mBase += ((10 - s.mBase) * 0.002 * dt);
   s.wash *= Math.exp(-dt / 300);
-  if (s.act === 1) stepAct1(s, d, dt); else stepAct2(s, d, dt);
-  quarter(s, d); advisor(s, d); mails(s, d); histPush(s, d);
+  if (s.act === 1) stepAct1(s, d, dt, off); else stepAct2(s, d, dt, off);
+  if (off) s.q.startT += dt; else { quarter(s, d); advisor(s, d); mails(s, d); }
+  histPush(s, d);
   // bridge loan
   if (s.cash < 5 && d.pi <= 0) { s.bridge += dt; if (s.bridge > 60) { s.bridge = 0; s.cash += s.act === 1 ? 600 : Math.max(1e4, 600 * Math.abs(d.pi)); mail(s, 'bridge'); } } else s.bridge = 0;
   if (s.cash < 0) s.cash = 0;
 }
 export function stepN(s: State, n: number, dt = TICK) { for (let i = 0; i < n && !s.ended; i++) step(s, dt); }
 
-function stepAct1(s: State, d: Derived, dt: number) {
+function stepAct1(s: State, d: Derived, dt: number, off: boolean) {
   const rho = A1.RHO0 + A1.RHO_HR * s.lc[4] + (s.own.wellness ? 0.001 : 0) + (s.own.recog ? 0.0008 : 0);
   const cap = A1.MCAP - (s.own.telemetry ? 0.05 : 0);
   s.M = Math.min(cap, s.M + rho * dt);
   if (s.M < 0.6) s.flags.lowM = 1;
   s.X = Math.max(0, s.X - (A1.EXP_DECAY + A1.EXP_LEG * (s.lc[5] + s.lcx[5]) + (s.own.legalhold ? 0.2 : 0)) * dt);
   if (s.X >= 70) s.flags.lawW = 1;
-  if (s.X >= 100) { s.cash *= 1 - A1.LAWSUIT_LOSS; s.X = 40; s.lawsuits++; s.stats.lawsuits++; log(s, 'lawsuit', undefined, 'bad'); mail(s, 'a1_lawsuit'); }
+  if (!off && s.X >= 100) { s.cash *= 1 - A1.LAWSUIT_LOSS; s.X = 40; s.lawsuits++; s.stats.lawsuits++; log(s, 'lawsuit', undefined, 'bad'); mail(s, 'a1_lawsuit'); }
   attrition(s, dt, s.M);
+  if (off) return;
   cip(s, d, dt);
   if (s.own.copilot && s.t > s.hallUntil) { const p = 1 - Math.exp(-dt / 600); if (next(s) < p) { s.hallUntil = s.t + A1.HAL_DUR; log(s, 'halluc', undefined, 'bad'); } }
   // scope creep
@@ -464,9 +462,9 @@ function stepAct1(s: State, d: Derived, dt: number) {
   void d;
 }
 
-function stepAct2(s: State, d: Derived, dt: number) {
+function stepAct2(s: State, d: Derived, dt: number, off: boolean) {
   // integration
-  const mv = Math.min(s.U, (d.rcEff / A2.KAPPA) * dt);
+  const mv = Math.min(s.U, (d.rcEff / A2.KAPPA) * dt * (off ? 0.5 : 1));
   if (mv > 0) {
     s.U -= mv; s.I += mv; let left = mv; let cult = 1;
     for (const t of s.tiles) { if (t.left <= 0) continue; const tk = Math.min(t.left, left); t.left -= tk; left -= tk; cult = CULTURES[t.cult]?.mul ?? 1; if (left <= 0) break; }
@@ -476,6 +474,7 @@ function stepAct2(s: State, d: Derived, dt: number) {
   }
   s.S = Math.max(0, s.S - A2.SCANDAL_DECAY * dt);
   s.hqExcess *= Math.exp(-dt / 120);
+  if (off) { s.S = Math.max(0, s.S - 0); if (s.act === 3) { s.HD *= 1; } return; }
   // hallucinations
   const ai = d.ai;
   if (ai > 0 && s.t > s.hallUntil) {

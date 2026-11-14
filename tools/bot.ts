@@ -35,7 +35,7 @@ function act1(s: State, mode: Mode) {
   if (!s.own.memo && s.own.cip1 === undefined) void 0;
 }
 
-export function run(opts: { seed?: number; mode?: Mode; maxMin?: number; stopAct?: number; init?: Record<string, number>; every?: number; trace?: number } = {}): Run {
+export function run(opts: { seed?: number; mode?: Mode; maxMin?: number; stopAct?: number; init?: Record<string, number>; every?: number; trace?: number; hook?: (s: State) => void } = {}): Run {
   const mode = opts.mode ?? 'greedy';
   const s = initState(opts.seed ?? 1, 'Alex', opts.init ?? {});
   const marks: Record<string, number> = {}; const lg: string[] = [];
@@ -43,7 +43,7 @@ export function run(opts: { seed?: number; mode?: Mode; maxMin?: number; stopAct
   let acc = every; const maxT = (opts.maxMin ?? 240) * 60;
   const seenOwn = new Set<string>(); let lastAct = 1;
   while (s.t < maxT && !s.ended) {
-    S.step(s, TICK); acc += TICK;
+    S.step(s, TICK); acc += TICK; opts.hook?.(s);
     if (opts.trace && Math.abs(s.t / (opts.trace * 60) - Math.round(s.t / (opts.trace * 60))) < TICK / (opts.trace * 60) / 2) { const d = S.derive(s); const f = (x: number) => x.toExponential(2); console.log(`t=${(s.t / 60).toFixed(0)}m a${s.act} E=${f(d.E)} U=${f(s.U)} H=${f(d.humans)} cash=${f(s.cash)} debt=${f(s.debt)} pi=${f(d.pi)} piRep=${f(d.piRep)} mc=${f(d.mcRep)} m=${d.mTot.toFixed(1)} S=${s.S.toFixed(0)} F=${d.phiF.toFixed(2)} ab=${s.addback} ai=${d.ai} rc=${s.rc.join('/')} lam=${d.lambdaC.toFixed(2)} sl=${f(s.slides)}`); }
     if (acc >= every) { acc = 0; policy(s, mode); }
     for (const id in s.own) if (!seenOwn.has(id)) { seenOwn.add(id); marks['own:' + id] = s.t; }
