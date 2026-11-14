@@ -164,7 +164,6 @@ export function Initiatives() {
       <div class="goal card"><span class="muted small">{t('init.next')}</span>{next ? <><b>{initName(next.i.id)}</b><span>{t('init.afford')} <b>{eta(next.e)}</b></span></> : <span class="muted">{t('init.wait')}</span>}</div>
       {gens}
       {list.map((i) => <Card key={i.id} id={i.id} />)}
-      {!list.length ? <div class="muted empty">{t('init.none')}</div> : null}
       {owned.length ? <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}><summary>{t('init.owned')} ({owned.length})</summary><ul class="ownedlist">{owned.map((i) => <li key={i.id}>{initName(i.id)}</li>)}</ul></details> : null}
     </div>
   );
