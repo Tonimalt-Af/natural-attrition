@@ -32,7 +32,7 @@ export interface State {
   mix: number[]; HD: number; lastCust: number; minskyUntil: number; closureSeen: number; actT: number[];
   a4: A4State;
   log: LogLine[]; inbox: Mail[]; seen: Record<string, number>; hist: number[][]; histAt: number;
-  advAt: number; lastBuyT: number; flags: Record<string, number>; stats: Stats; rev: number;
+  advAt: number; lastBuyT: number; pl?: Record<string, number>; flags: Record<string, number>; stats: Stats; rev: number;
 }
 
 export function initState(seed = 1, name = 'Alex', opt: Record<string, number> = {}): State {

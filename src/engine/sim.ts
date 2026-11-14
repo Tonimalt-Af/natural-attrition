@@ -257,7 +257,10 @@ export function costOf(s: State, it: Init) {
   // "Value-based pricing": nothing ever costs more than a few minutes of what you are actually earning, so a fast player never sits out a flat price.
   const piRef = s.act >= 2 ? Math.max(s.piS, s.piBase * 0.5) : s.piS;
   const cash = it.cashMin || piRef < PRICE_MIN_PI ? cash0 : Math.min(cash0, Math.max((s.act >= 2 ? PRICE_CAP_MIN_2 : PRICE_CAP_MIN) * 60 * piRef, 0));
-  return { slides: Math.ceil(it.slides * pity), cash: cash * pity };
+  // Act I price lock: once quoted, a price never goes up (otherwise it chases your income and you never catch it).
+  let locked = cash;
+  if (s.act === 1 && !it.cashMin) { const pl = (s.pl ||= {}); locked = Math.min(pl[it.id] ?? Infinity, cash); if (!s.own[it.id] && visible(s, it)) pl[it.id] = locked; }
+  return { slides: Math.ceil(it.slides * pity), cash: locked * pity };
 }
 export function canBuy(s: State, id: string): string {
   const it = INIT_BY_ID[id]; if (!it) return 'unknown'; if (s.own[id]) return 'owned';
